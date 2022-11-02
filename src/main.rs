@@ -39,6 +39,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             } => {
                 // TODO: Handle resize
             }
+            Event::MainEventsCleared => {
+                // TODO: Update simulation
+            }
             Event::RedrawRequested(_) => {
                 // TODO: Render
             }
