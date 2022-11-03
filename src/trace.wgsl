@@ -21,7 +21,8 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     let camera_direction: vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
-    let camera_position: vec3<f32> = vec3<f32>(uv.x,uv.y,0.0);
+    let camera_position: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
+    let camera_pixel_position: vec3<f32> = vec3<f32>(uv.x,uv.y,0.0) + camera_position;
     // TODO: Loop over bodies, raycast, find closest intersection (if any)
     // TODO: Shade pixel, for now inverse-depth
     var index_of_nearest_intersection: i32 = -1;
@@ -29,7 +30,7 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let body_position: vec3<f32> = positions[i];
         let body_radius: f32 = masses[i];
-        let displacement: vec3<f32> = body_position - camera_position;
+        let displacement: vec3<f32> = body_position - camera_pixel_position;
         let displacement_length: f32 = max(length(displacement), 0.001);
         let displacement_normal: vec3<f32> = displacement / displacement_length;
         let dot_product: f32 = dot(displacement_normal, camera_direction);
