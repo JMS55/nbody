@@ -7,8 +7,7 @@
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
-	let wg_id = global_invocation_id.x; //only using x coord for now
+    let wg_id = global_invocation_id.x; //only using x coord for now
 	//for now, write as though 1-d decomposition
 	//non-positionally, but instead across the flat body array by-index
-	
 }
