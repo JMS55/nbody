@@ -15,8 +15,8 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 
 // ------------------------------------------------------------------------------------------------
 
-@group(0) @binding(0) var<storage, read> positions: array<vec3<f32>>;
-@group(0) @binding(1) var<storage, read> masses: array<f32>;
+@group(0) @binding(0) var<storage, read> masses: array<f32>;
+@group(1) @binding(0) var<storage, read> positions: array<vec3<f32>>;
 
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
