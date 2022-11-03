@@ -15,9 +15,13 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 
 // ------------------------------------------------------------------------------------------------
 
+//bind groups (which can contain multiple bindings) are collections of resources
+	//alloc'd in GPU mem, to which CPU has handles (like ptrs)
 @group(0) @binding(0) var<storage, read> positions: array<vec3<f32>>;
 @group(0) @binding(1) var<storage, read> masses: array<f32>;
-
+//pipeline: set of shaders etc. to run
+	//get a handle to a compiled pipeline
+	//run the pipeline (handle), giving it access to bindgroups(s) (as handles)
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     // TODO: Loop over bodies, raycast, find closest intersection (if any)
