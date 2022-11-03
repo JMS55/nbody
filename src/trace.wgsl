@@ -26,7 +26,7 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     // TODO: Shade pixel, for now inverse-depth
     var index_of_nearest_intersection: i32 = -1;
     var distance_of_nearest_intersection: f32 = 100000000000;
-    for (var i: i32 = 0; i < positions.len(); i++) {
+    for (var i: i32 = 0; i < arrayLength(positions); i++) {
         const body_position: vec3<f32>  = positions[i];
         const body_radius: f32 = masses[i];
         const displacement: vec3<f32> = body_position-camera_position;
