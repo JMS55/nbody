@@ -41,11 +41,21 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_device(&DeviceDescriptor::default(), None)
         .await
         .unwrap();
+    let size = window.inner_size();
+    let mut config = SurfaceConfiguration {
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        format: surface.get_supported_formats(&adapter)[0],
+        width: size.width,
+        height: size.height,
+        present_mode: PresentMode::Fifo,
+        alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
+    };
+    surface.configure(&device, &config);
+
     //TODO: read input data / gen random
     let masses = BASE_MASSES;
     let positions = BASE_POSITIONS;
 
-    // TODO: Create constant gpu resources
     /*setup:
     	* buffers for I/O that the shader will r/w
     	* if using BufferInitDescriptor, requires: initial state already allocated in CPU mem
@@ -86,7 +96,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         label: Some("mass_bind_group_layout"),
         entries: &[BindGroupLayoutEntry {
             binding: MASS_BINDING,
-            visibility: ShaderStages::COMPUTE,
+            visibility: ShaderStages::COMPUTE | ShaderStages::FRAGMENT,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
@@ -101,7 +111,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             BindGroupLayoutEntry {
                 //position's entry
                 binding: POS_BINDING,
-                visibility: ShaderStages::COMPUTE,
+                visibility: ShaderStages::COMPUTE | ShaderStages::FRAGMENT,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: false,
@@ -182,7 +192,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     //this shader must be compiled to a pipeline, and the handle thereof retrieved
     let nbody_shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: None,
+        label: Some("nbody_shader"),
         source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("nbody.wgsl"))),
     });
     //pipeline layout, then pipeline the compute shader
@@ -203,18 +213,50 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entry_point: "nbody_step", //name of fn within shader that gets called
     });
 
+    let trace_shader = device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("trace_shader"),
+        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("trace.wgsl"))),
+    });
+    let trace_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("trace_pipeline_layout"),
+        bind_group_layouts: &[&mass_bind_group_layout, &posvel_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+    let trace_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("trace_pipeline"),
+        layout: Some(&trace_pipeline_layout),
+        vertex: VertexState {
+            module: &trace_shader,
+            entry_point: "fullscreen_vertex_shader",
+            buffers: &[],
+        },
+        primitive: PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: MultisampleState::default(),
+        fragment: Some(FragmentState {
+            module: &trace_shader,
+            entry_point: "trace",
+            targets: &[Some(surface.get_supported_formats(&adapter)[0].into())],
+        }),
+        multiview: None,
+    });
+
     event_loop.run(move |event, _, control_flow| {
         //let _ = (&instance, &adapter, &nbody_shader);
 
         match event {
             Event::WindowEvent {
-                event: WindowEvent::Resized(_size),
+                event: WindowEvent::Resized(size),
                 ..
             } => {
-                // TODO: Handle resize
+                config.width = size.width;
+                config.height = size.height;
+                surface.configure(&device, &config);
+                window.request_redraw();
             }
+
+            // Update simulation (nbody.wgsl)
             Event::MainEventsCleared => {
-                // TODO: Update simulation
                 //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
                 let mut nbody_step_cmd_encoder =
                     device.create_command_encoder(&CommandEncoderDescriptor {
@@ -242,13 +284,42 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 //swap groups a and b to alternate I/O
                 mem::swap(&mut posvel_bind_group_a, &mut posvel_bind_group_b);
             }
+
+            // Render (trace.wgsl)
             Event::RedrawRequested(_) => {
-                // TODO: Render
+                let frame = surface.get_current_texture().unwrap();
+                let view = frame.texture.create_view(&TextureViewDescriptor::default());
+                let mut trace_cmd_encoder =
+                    device.create_command_encoder(&CommandEncoderDescriptor {
+                        label: Some("trace_cmd_encoder"),
+                    });
+
+                {
+                    let mut trace_pass =
+                        trace_cmd_encoder.begin_render_pass(&RenderPassDescriptor {
+                            label: Some("trace_pass"),
+                            color_attachments: &[Some(RenderPassColorAttachment {
+                                view: &view,
+                                resolve_target: None,
+                                ops: Operations::default(),
+                            })],
+                            depth_stencil_attachment: None,
+                        });
+                    trace_pass.set_pipeline(&trace_pipeline);
+                    trace_pass.set_bind_group(0, &mass_bind_group, &[]);
+                    trace_pass.set_bind_group(1, &posvel_bind_group_b, &[]);
+                    trace_pass.draw(0..3, 0..1);
+                }
+
+                queue.submit(Some(trace_cmd_encoder.finish()));
+                frame.present();
             }
+
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => *control_flow = ControlFlow::Exit,
+
             _ => {}
         }
     });
