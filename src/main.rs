@@ -9,7 +9,8 @@ use winit::{
 };
 
 const N_BODIES: usize = 4;
-const N_WORKGROUPS: u32 = 1;
+//const N_WORKGROUPS: u32 = 1;
+const WG_SIZE: u32 = 64;
 
 const MASS_GROUP: u32 = 0;
 const POSVEL_IN_GROUP: u32 = 1;
@@ -81,7 +82,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         usage: BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
-    //bind group layouts: mass:, pos&vel(2*(
+    //bind group layouts
     let mass_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("mass_bind_group_layout"),
         entries: &[BindGroupLayoutEntry {
@@ -234,7 +235,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     //dispatch!
                     //can use dispatch_workgroups_indirect to use GPU to compute clustering
                     //then the GPU can determine n_workgroups from an in-GPU buffer without copy-paste
-                    nbody_step_pass.dispatch_workgroups(N_WORKGROUPS, 1, 1);
+					let n_workgroups:u32 = ( (((N_BODIES as f32)/(WG_SIZE as f32)).ceil() ) ) as u32;
+					//TODO: probably something else...
+						//at minimum: spread across x,y,z to support more than like, 2^22 bodies
+                    nbody_step_pass.dispatch_workgroups(n_workgroups, 1, 1);
                 }
                 //submit command encoder to queue
                 let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
