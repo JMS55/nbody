@@ -19,7 +19,7 @@ const MASS_BINDING: u32 = 0;
 const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 
-const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 0.6, 0.8];
+const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
 /*const BASE_POSITIONS: &'static [[f32; 3]] = &[
     [1.0, 1.0, 2.0],
     [2.0, 2.0, 3.0],
@@ -31,7 +31,7 @@ const BASE_POSITIONS: &'static [f32; 16] = &[
     1.0, 1.0, 2.0, 0.0,
     3.0, 4.0, 5.0, 0.0,
 	3.0, 8.0, 4.0, 0.0,
-	2.0, 7.0, 1.5, 0.0
+	8.0, 7.0, 8.5, 0.0
 ];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {

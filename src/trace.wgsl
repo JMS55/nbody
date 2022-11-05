@@ -32,7 +32,7 @@ camera_position;
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let body_position: vec3<f32> = positions[i];
         let body_position_2d: vec2<f32> = body_position.xy;
-        let body_radius: f32 = 1.0f*masses[i];
+        let body_radius: f32 = 0.1f*log2(2.0f+log2((2.0f+masses[i])));
         if (length(body_position_2d-camera_pixel_position.xy)<body_radius) {
           index_of_nearest_intersection = i32(i);
         }
