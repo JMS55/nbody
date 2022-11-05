@@ -19,12 +19,19 @@ const MASS_BINDING: u32 = 0;
 const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 
-const BASE_MASSES: &'static [f32] = &[0.1, 1.0, 2.0, 3.0];
-const BASE_POSITIONS: &'static [[f32; 3]] = &[
-    [1.0, 2.0, 3.0],
-    [4.0, 5.0, 6.0],
-    [7.0, 8.0, 9.0],
-    [10.0, 11.0, 12.0],
+const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 0.6, 0.8];
+/*const BASE_POSITIONS: &'static [[f32; 3]] = &[
+    [1.0, 1.0, 2.0],
+    [2.0, 2.0, 3.0],
+	[0.2, 0.2, 0.2],
+	[5.0, 1.0, 2.0]
+];*/
+//WGSL vec3 type is aligned to 16 bytes, so need to pad out the values for actual correctness!!
+const BASE_POSITIONS: &'static [f32; 16] = &[
+    1.0, 1.0, 2.0, 0.0,
+    3.0, 4.0, 5.0, 0.0,
+	3.0, 8.0, 4.0, 0.0,
+	2.0, 7.0, 1.5, 0.0
 ];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
@@ -77,7 +84,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let pos_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("pos_buffer_b"),
-        size: (mem::size_of::<[f32; 3]>() * N_BODIES) as u64,
+        size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
         usage: BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
@@ -88,10 +95,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let vel_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("vel_buffer_b"),
-        size: (mem::size_of::<[f32; 3]>() * N_BODIES) as u64,
+        size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
         usage: BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
+	
     //bind group layouts
     let mass_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("mass_bind_group_layout"),
@@ -140,11 +148,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         layout: &mass_bind_group_layout,
         entries: &[BindGroupEntry {
             binding: MASS_BINDING,
-            resource: BindingResource::Buffer(BufferBinding {
+            /*resource: BindingResource::Buffer(BufferBinding {
                 buffer: &mass_buffer,
                 offset: 0,
                 size: None,
-            }),
+            }),*/
+			resource: mass_buffer.as_entire_binding()
         }],
     });
     let mut posvel_bind_group_a = device.create_bind_group(&BindGroupDescriptor {
@@ -153,19 +162,21 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
-                resource: BindingResource::Buffer(BufferBinding {
+                /*resource: BindingResource::Buffer(BufferBinding {
                     buffer: &pos_buffer_a,
                     offset: 0,
                     size: None,
-                }),
+                }),*/
+				resource: pos_buffer_a.as_entire_binding()
             },
             BindGroupEntry {
                 binding: VEL_BINDING,
-                resource: BindingResource::Buffer(BufferBinding {
+                /*resource: BindingResource::Buffer(BufferBinding {
                     buffer: &vel_buffer_a,
                     offset: 0,
                     size: None,
-                }),
+                }),*/
+				resource: vel_buffer_a.as_entire_binding()
             },
         ],
     });
@@ -175,22 +186,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
-                resource: BindingResource::Buffer(BufferBinding {
+                /*resource: BindingResource::Buffer(BufferBinding {
                     buffer: &pos_buffer_b,
                     offset: 0,
                     size: None,
-                }),
+                }),*/
+				resource: pos_buffer_b.as_entire_binding()
             },
             BindGroupEntry {
                 binding: VEL_BINDING,
-                resource: BindingResource::Buffer(BufferBinding {
+                /*resource: BindingResource::Buffer(BufferBinding {
                     buffer: &vel_buffer_b,
                     offset: 0,
                     size: None,
-                }),
+                }),*/
+				resource: vel_buffer_b.as_entire_binding()
             },
         ],
     });
+	
     //this shader must be compiled to a pipeline, and the handle thereof retrieved
     let nbody_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("nbody_shader"),
@@ -259,7 +273,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             // Update simulation (nbody.wgsl)
             Event::MainEventsCleared => {
                 //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
-                let mut nbody_step_cmd_encoder =
+                
+				let mut nbody_step_cmd_encoder =
                     device.create_command_encoder(&CommandEncoderDescriptor {
                         label: Some("nbody_step_cmd_encoder"),
                     });
@@ -284,9 +299,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 }
                 //submit command encoder to queue
                 let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
-
+				
                 //swap groups a and b to alternate I/O
                 mem::swap(&mut posvel_bind_group_a, &mut posvel_bind_group_b);
+				
+				window.request_redraw();
             }
 
             // Render (trace.wgsl)
