@@ -12,7 +12,7 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 	//let G:f32 = .0000000000000066743;
     //let G:f32 = .066743; //for testing
     let G:f32 = .0066743; //for testing
-	let TIME_STEP:f32 = 0.05;
+	let TIME_STEP:f32 = 0.1;
 	let i_id = global_invocation_id.x; //only using x coord for now
 	//let i_id = local_invocation_id.x; //only using x coord for now
 	//let i_id = 1u; //only using x coord for now
@@ -58,8 +58,9 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 			let dist_sqrd = pow(distance(other_pos,pos), 2.0);
 				//let dist_sqrd = pow(distance(other_pos,pos), 1.1);
 			var g = G*other_mass / dist_sqrd;
-				//g /= mass;
-				//g = clamp(g, 0.01, 0.1);
+			//a hack to make things weightier
+			g /= mass;
+			
 			//bias to account more for slowdowns than progressive speedups
 				//this is important while we aren't doing dynamic timestep
 					//because an imbalance of steps due to higher velocity on inbound than outbound of proximity
@@ -68,12 +69,14 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 				//mag(a) = 2-norm(a) = distance(0vec, a)
 			//start with the angle between the accelerator and the current velocity
 			var bias = acos(dot(vel,acc))/(distance(vec3(0.0),dist_vec)*distance(vec3(0.0),vel));
-			//sqrt2 to rein in the extremes
-			bias = sqrt(bias);
+			//sqrt to rein in the extremes
+			bias = pow(bias, 0.6);
 			g *= bias;
 			
 			//a hack to make things less absurd
-			g = min(g, 0.15);
+				//g = clamp(g, 0.01, 0.1);
+			g = min(g, 0.1);
+			
 			let normed_dist_vec = normalize(dist_vec);
 			acc += g*normed_dist_vec;
 		}
@@ -87,8 +90,10 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 		//pos_f = pos_i + vel_i*t + .5*a*t^2
 	pos += velocities_in[i_id]*time_step + (0.5)*acc*pow(time_step,2.0);
 	
+	//a little hack to make things less floaty; kinda like a friction
+	vel *= 0.9996;
 	//update velocity using: initial velocity and acceleration
-	vel = vel + acc*time_step;
+	vel += acc*time_step;
 	
 	//pos += G*vel;
 	//vel = normalize(pos);
