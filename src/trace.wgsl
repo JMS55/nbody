@@ -20,10 +20,13 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 //@group(2) @binding(0) var<storage, read> densities: array<f32>;
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-    let camera_direction: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
+    let camera_direction: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0); //must be a normal vector
+    let camera_plane_x: vec3<f32> = vec3<f32>(0.707,0.707,0.0); //points in the direction in world space that the x-axis of the camera lens is in
+    let camera_plane_y: vec3<f32> = vec3<f32>(-0.707,0.707,0.0); //points in the direction in world space that the y-axis of the camera lens is in
     let camera_position: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     let window_size: vec2<f32> = vec2<f32>(20.0, 15.0);
-    let camera_pixel_position: vec3<f32> = vec3<f32>(window_size.x*uv.x, window_size.y*uv.y, 0.0) + 
+    let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x*uv.x, window_size.y*uv.y);
+    let camera_pixel_position: vec3<f32> = relative_camera_pixel_position.x*camera_plane_x + relative_camera_pixel_position.y*camera_plane_y + 
 camera_position;
     // TODO: Loop over bodies, raycast, find closest intersection (if any)
     // TODO: Shade pixel, for now inverse-depth
@@ -32,16 +35,18 @@ camera_position;
     var intensity: f32 = 0.0;
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let body_position: vec3<f32> = positions[i];
-        let body_position_2d: vec2<f32> = body_position.xy;
+        let body_depth: f32 = length(body_position*camera_direction);
+        let body_position_2d: vec3<f32> = body_position*camera_plane_x+body_position*camera_plane_y;
         let body_density: f32 = 1.0; //densities[i];
 	//let body_radius: f32 = masses[i]/body_density; //yep, once implemented, this'll be good
 	let body_radius: f32 = (0.1f*log2((2.0f+masses[i]))); //for now, do this to control density a bit
-        let offset_2d: vec2<f32> = camera_pixel_position.xy-body_position_2d;
-        let intersection_normal : vec3<f32> = vec3(offset_2d/body_radius,sin(acos(length(offset_2d/body_radius))));
+        let offset_2d: vec3<f32> = camera_pixel_position-body_position_2d;
+        let intersection_normal : vec3<f32> = offset_2d/body_radius+camera_direction*sin(acos(length(offset_2d/body_radius)));
         let intersection : vec3<f32> = intersection_normal*body_radius;
-        if (length(offset_2d)<body_radius && (body_position.z-intersection.z) < distance_of_nearest_intersection) {
+        let intersection_depth : f32 = length(intersection*camera_direction);
+        if (length(offset_2d)<body_radius && (body_depth-intersection_depth) < distance_of_nearest_intersection) {
           index_of_nearest_intersection = i32(i);
-          distance_of_nearest_intersection = body_position.z-intersection.z;
+          distance_of_nearest_intersection = body_depth-intersection_depth;
           intensity = dot(intersection_normal,camera_direction);
         }
     }
