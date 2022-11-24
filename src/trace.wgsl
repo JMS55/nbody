@@ -20,9 +20,12 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 //@group(2) @binding(0) var<storage, read> densities: array<f32>;
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-    let camera_direction: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0); //must be a normal vector
-    let camera_plane_x: vec3<f32> = vec3<f32>(0.707,0.707,0.0); //points in the direction in world space that the x-axis of the camera lens is in
-    let camera_plane_y: vec3<f32> = vec3<f32>(-0.707,0.707,0.0); //points in the direction in world space that the y-axis of the camera lens is in
+    let camera_angle_elevation: vec2<f32> = vec2<f32>(0.0,0.0); 
+    //let camera_init_direction: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0); //must be a normal vector
+    let camera_direction: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.y)*sin(camera_angle_elevation.x),sin(camera_angle_elevation.y),cos(camera_angle_elevation.y)*cos(camera_angle_elevation.x));
+    
+    let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.x),0.0,sin(camera_angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
+    let camera_plane_y: vec3<f32> = vec3<f32>(-sin(camera_angle_elevation.x)*sin(camera_angle_elevation.y),cos(camera_angle_elevation.y),cos(camera_angle_elevation.x)*sin(camera_angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
     let camera_position: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     let window_size: vec2<f32> = vec2<f32>(20.0, 15.0);
     let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x*uv.x, window_size.y*uv.y);
