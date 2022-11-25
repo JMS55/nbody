@@ -3,7 +3,7 @@ use std::mem;
 use wgpu::util::*; //include some stuff outside of spec
 use wgpu::*;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{Event, WindowEvent,KeyboardInput,VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -33,6 +33,9 @@ const BASE_POSITIONS: &'static [f32; 16] = &[
 	3.0, 8.0, 4.0, 0.0,
 	8.0, 7.0, 8.5, 0.0
 ];
+
+static mut camera_position: [f32; 4] = [0.0,0.0,0.0,0.0];
+static mut camera_rotation: [f32; 4] = [0.0,0.0,0.0,0.0];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     // Setup gpu
@@ -256,7 +259,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         multiview: None,
     });
 
-    event_loop.run(move |event, _, control_flow| {
+    unsafe {event_loop.run(move |event, _, control_flow| {
         //let _ = (&instance, &adapter, &nbody_shader);
 
         match event {
@@ -268,6 +271,37 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 config.height = size.height;
                 surface.configure(&device, &config);
                 window.request_redraw();
+            }
+            
+            Event::WindowEvent {event: WindowEvent::KeyboardInput{input: KeyboardInput{virtual_keycode: event_input, ..}, ..}, ..} => {
+                let key_val = event_input;
+                match key_val {
+                    Option::None => {}
+                    Option::Some(vkc) => {
+                        if vkc==VirtualKeyCode::Left {
+                            camera_rotation[0] -= 1.0;
+                        } else if vkc==VirtualKeyCode::Right {
+                            camera_rotation[0] += 1.0;
+                        } else if vkc==VirtualKeyCode::Up {
+                            camera_rotation[1] += 1.0;
+                        } else if vkc==VirtualKeyCode::Down {
+                            camera_rotation[1] -= 1.0;
+                        } else if vkc==VirtualKeyCode::A {
+                            camera_position[0] -= 1.0;
+                        } else if vkc==VirtualKeyCode::D {
+                            camera_position[0] += 1.0;
+                        } else if vkc==VirtualKeyCode::Q {
+                            camera_position[1] += 1.0;
+                        } else if vkc==VirtualKeyCode::E {
+                            camera_position[1] -= 1.0;
+                        } else if vkc==VirtualKeyCode::S {
+                            camera_position[2] -= 1.0;
+                        } else if vkc==VirtualKeyCode::W {
+                            camera_position[2] += 1.0;
+                        }
+                    }
+                    
+                }
             }
 
             // Update simulation (nbody.wgsl)
@@ -343,7 +377,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
             _ => {}
         }
-    });
+        });
+    }
 }
 
 fn main() {
