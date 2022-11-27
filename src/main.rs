@@ -35,7 +35,7 @@ const BASE_POSITIONS: &'static [f32; 16] = &[
 ];
 
 static mut camera_position: [f32; 4] = [0.0,0.0,0.0,0.0];
-static mut camera_rotation: [f32; 4] = [0.0,0.0,0.0,0.0];
+static mut camera_angle_elevation: [f32; 4] = [0.0,0.0,0.0,0.0];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     // Setup gpu
@@ -279,13 +279,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     Option::None => {}
                     Option::Some(vkc) => {
                         if vkc==VirtualKeyCode::Left {
-                            camera_rotation[0] -= 1.0;
+                            camera_angle_elevation[0] -= 1.0;
                         } else if vkc==VirtualKeyCode::Right {
-                            camera_rotation[0] += 1.0;
+                            camera_angle_elevation[0] += 1.0;
                         } else if vkc==VirtualKeyCode::Up {
-                            camera_rotation[1] += 1.0;
+                            camera_angle_elevation[1] += 1.0;
                         } else if vkc==VirtualKeyCode::Down {
-                            camera_rotation[1] -= 1.0;
+                            camera_angle_elevation[1] -= 1.0;
                         } else if vkc==VirtualKeyCode::A {
                             camera_position[0] -= 1.0;
                         } else if vkc==VirtualKeyCode::D {
