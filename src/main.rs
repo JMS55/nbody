@@ -13,11 +13,12 @@ const N_BODIES: usize = 4;
 const WG_SIZE: u32 = 64;
 
 const MASS_GROUP: u32 = 0;
-const POSVEL_IN_GROUP: u32 = 1;
-const POSVEL_OUT_GROUP: u32 = 2;
+const KINEMATICS_IN_GROUP: u32 = 1;
+const KINEMATICS_OUT_GROUP: u32 = 2;
 const MASS_BINDING: u32 = 0;
 const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
+const ACC_BINDING: u32 = 2; //bindings, not the bind groups
 
 const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
 /*const BASE_POSITIONS: &'static [[f32; 3]] = &[
@@ -102,6 +103,17 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         usage: BufferUsages::STORAGE,
         mapped_at_creation: false,
     });
+	let acc_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("acc_buffer_a"),
+        contents: bytemuck::cast_slice(&[0.0; N_BODIES * 3]), //init to 0, also *3 cast_slice flat
+        usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
+    });
+    let acc_buffer_b = device.create_buffer(&BufferDescriptor {
+        label: Some("acc_buffer_b"),
+        size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
+        usage: BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    });
 	
     //bind group layouts
     let mass_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -112,13 +124,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: None, //TODO: optimize
+                min_binding_size: None //TODO: optimize
             },
-            count: None, //other values only for Texture, not Storage
+            count: None //other values only for Texture, not Storage
         }],
     });
-    let posvel_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("posvel_bind_group_layout"),
+    let kinematics_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("kinematics_bind_group_layout"),
         entries: &[
             BindGroupLayoutEntry {
                 //position's entry
@@ -129,7 +141,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     has_dynamic_offset: false,
                     min_binding_size: None, //TODO: optimize
                 },
-                count: None, //other values only for Texture, not Storage
+                count: None //other values only for Texture, not Storage
             },
             BindGroupLayoutEntry {
                 //velocity's entry
@@ -140,8 +152,19 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     has_dynamic_offset: false,
                     min_binding_size: None, //TODO: optimize
                 },
-                count: None, //other values only for Texture, not Storage
+                count: None //other values only for Texture, not Storage
             },
+			BindGroupLayoutEntry {
+                //acceleration's entry
+                binding: ACC_BINDING,
+                visibility: ShaderStages::COMPUTE,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None, //TODO: optimize
+                },
+                count: None //other values only for Texture, not Storage
+            }
         ],
     });
 
@@ -159,9 +182,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			resource: mass_buffer.as_entire_binding()
         }],
     });
-    let mut posvel_bind_group_a = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("posvel_bind_group_a"),
-        layout: &posvel_bind_group_layout,
+    let mut kinematics_bind_group_a = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("kinematics_bind_group_a"),
+        layout: &kinematics_bind_group_layout,
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
@@ -181,11 +204,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 }),*/
 				resource: vel_buffer_a.as_entire_binding()
             },
+			BindGroupEntry {
+                binding: ACC_BINDING,
+				resource: acc_buffer_a.as_entire_binding()
+            }
         ],
     });
-    let mut posvel_bind_group_b = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("posvel_bind_group_b"),
-        layout: &posvel_bind_group_layout,
+    let mut kinematics_bind_group_b = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("kinematics_bind_group_b"),
+        layout: &kinematics_bind_group_layout,
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
@@ -205,6 +232,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 }),*/
 				resource: vel_buffer_b.as_entire_binding()
             },
+			BindGroupEntry {
+                binding: ACC_BINDING,
+				resource: acc_buffer_b.as_entire_binding()
+            }
         ],
     });
 	
@@ -218,8 +249,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         label: Some("nbody_pipeline_layout"),
         bind_group_layouts: &[
             &mass_bind_group_layout,
-            &posvel_bind_group_layout,
-            &posvel_bind_group_layout,
+            &kinematics_bind_group_layout,
+            &kinematics_bind_group_layout
         ],
         push_constant_ranges: &[], //empty is fine
     });
@@ -237,7 +268,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let trace_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("trace_pipeline_layout"),
-        bind_group_layouts: &[&mass_bind_group_layout, &posvel_bind_group_layout],
+        bind_group_layouts: &[&mass_bind_group_layout, &kinematics_bind_group_layout],
         push_constant_ranges: &[],
     });
     let trace_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -246,7 +277,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         vertex: VertexState {
             module: &trace_shader,
             entry_point: "fullscreen_vertex_shader",
-            buffers: &[],
+            buffers: &[]
         },
         primitive: PrimitiveState::default(),
         depth_stencil: None,
@@ -254,7 +285,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         fragment: Some(FragmentState {
             module: &trace_shader,
             entry_point: "trace",
-            targets: &[Some(surface.get_supported_formats(&adapter)[0].into())],
+            targets: &[Some(surface.get_supported_formats(&adapter)[0].into())]
         }),
         multiview: None,
     });
@@ -321,8 +352,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     //now that we've initialized: set_pipeline, set_bind_group, dispatch_workgroups
                     nbody_step_pass.set_pipeline(&nbody_pipeline);
                     nbody_step_pass.set_bind_group(MASS_GROUP, &mass_bind_group, &[]);
-                    nbody_step_pass.set_bind_group(POSVEL_IN_GROUP, &posvel_bind_group_a, &[]);
-                    nbody_step_pass.set_bind_group(POSVEL_OUT_GROUP, &posvel_bind_group_b, &[]);
+                    nbody_step_pass.set_bind_group(KINEMATICS_IN_GROUP, &kinematics_bind_group_a, &[]);
+                    nbody_step_pass.set_bind_group(KINEMATICS_OUT_GROUP, &kinematics_bind_group_b, &[]);
                     //dispatch!
                     //can use dispatch_workgroups_indirect to use GPU to compute clustering
                     //then the GPU can determine n_workgroups from an in-GPU buffer without copy-paste
@@ -335,7 +366,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
 				
                 //swap groups a and b to alternate I/O
-                mem::swap(&mut posvel_bind_group_a, &mut posvel_bind_group_b);
+                mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
 				
 				window.request_redraw();
             }
@@ -362,7 +393,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         });
                     trace_pass.set_pipeline(&trace_pipeline);
                     trace_pass.set_bind_group(0, &mass_bind_group, &[]);
-                    trace_pass.set_bind_group(1, &posvel_bind_group_b, &[]);
+                    trace_pass.set_bind_group(1, &kinematics_bind_group_b, &[]);
                     trace_pass.draw(0..3, 0..1);
                 }
 
