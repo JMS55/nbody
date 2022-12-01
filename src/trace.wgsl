@@ -23,14 +23,76 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 //@group(2) @binding(0) var<storage, read> camera_angle_elevation: vec2<f32>;
 //@group(3) @binding(0) var<storage, read> camera_position: vec3<f32>;
 
+/*formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
+*    formula for sphere: (position_on_surface-center_of_sphere)**2 = radius ** 2
+*    formula for ray: position_on_surface = ray_o + ray_d * t
+*    revised formula for sphere: dot(position_on_surface-center_of_sphere,position_on_surface-center_of_sphere) - radius**2 = 0
+*    combined formula: dot((ray_o + ray_d * t)-center_of_sphere,(ray_o + ray_d * t)-center_of_sphere) - radius**2 = 0
+*    FOILed formula: dot(ray_o,ray_o)+dot(ray_o,ray_d*t)-dot(ray_o,center_of_sphere)+dot(ray_d*t,ray_o)+dot(ray_d*t,ray_d*t)-dot(ray_d*t,center_of_sphere)-dot(center_of_sphere,ray_o)-dot(center_of_sphere,ray_d*t)+dot(center_of_sphere,center_of_sphere)-radius**2
+*    At**2+Bt+C = dot(ray_d,ray_d)*t**2+t*dot(ray_o,ray_d)-t*dot(center_of_sphere,ray_d)+t*dot(ray_d,ray_o)-t*dot(ray_d,center_of_sphere)-dot(ray_o,center_of_sphere)-dot(center_of_sphere,ray_o)+dot(ray_o,ray_o)+dot(center_of_sphere,center_of_sphere)-radius**2
+*    A = dot(ray_d,ray_d)
+*    B = 2*dot(ray_o,ray_d)-2*dot(center_of_sphere,ray_d)
+*    C = dot(ray_o,ray_o)+dot(center_of_sphere,center_of_sphere)-2*dot(ray_o,center_of_sphere)-radius**2
+*    t = (-B+- sqrt(B**2-4*A*C))/(2*A)
+*    t = (-(2*dot(ray_o,ray_d)-2*dot(center_of_sphere,ray_d))+- sqrt((2*dot(ray_o,ray_d)-2*dot(center_of_sphere,ray_d))**2-4*dot(ray_d,ray_d)*(dot(ray_o,ray_o)+dot(center_of_sphere,center_of_sphere)-2*dot(ray_o,center_of_sphere))))/(2*dot(ray_d,ray_d))
+*/
 
+struct Intersection {
+    intersect_point: vec3<f32>,
+    distance: f32,
+    normal: vec3<f32>,
+    mass: f32,
+}
+
+
+
+//JASMINE: feel free to modify this if you import an acceleration structure as a uniform; for now it just loops over the spheres
+fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> is position of intersection, distance is 
+    var intersection: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
+    var distance: f32 = -1.0;
+    var normal: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
+    var mass: f32 = 0.0;
+    for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
+        let center: vec3<f32> = positions[i];
+        //TODO: once densities are incorporated, uncomment the below formula to get an accurate radius
+        let radius: f32 = pow(masses[i],1.0/3.0)/4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
+        let d: vec3<f32> = ray_d;
+        let p: vec3<f32> = ray_o;
+        let A: f32 = dot(ray_d,ray_d);
+        let B: f32 = 2.0 * dot(ray_o,ray_d) - 2.0 * dot(center,ray_d);
+        let C: f32 = dot(ray_o,ray_o) + dot(center,center) - 2.0 * dot(ray_o,center) - pow(radius,2.0);
+        let square_root_term: f32 = B * B - 4.0 * A * C;
+        if (square_root_term <= 0.0) {
+            continue;
+        }
+        let tplus: f32 = (-B + square_root_term) / (2.0 * A);
+        let tminus: f32 = (-B - square_root_term) / (2.0 * A);
+        let t: f32 = tminus;
+        /*var t:f32;
+        if (tminus > 0.0) {
+            t = tminus;
+        } else {
+            t = tplus;
+        }*/
+        if (t<0.0) {
+            continue;
+        }
+        if (distance==-1.0 || t < distance) {
+            intersection = ray_o + t * ray_d;
+            distance = t;
+            normal = intersection-center;
+            mass = masses[i];
+        }
+    }
+    return Intersection(intersection,distance,normal,mass);
+}
 
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     //PLEASE COMMENT OUT THESE TWO LINES AND UNCOMMENT THE DECLARATIONS ABOVE
     let camera_angle_elevation: vec2<f32> = vec2<f32>(0.0,0.0);
-    let camera_position: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
+    let camera_position: vec3<f32> = vec3<f32>(0.0,0.0,-10.0);
     
     
     let camera_direction: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.y)*sin(camera_angle_elevation.x),sin(camera_angle_elevation.y),cos(camera_angle_elevation.y)*cos(camera_angle_elevation.x));
@@ -45,7 +107,14 @@ camera_position;
     var index_of_nearest_intersection: i32 = -1;
     var distance_of_nearest_intersection: f32 = 100000000000.0;
     var intensity: f32 = 0.0;
-    for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
+    let intersect: Intersection = ray_trace(camera_pixel_position,camera_direction);
+    if (intersect.distance<0.0) {
+        return vec4(0.0,0.0,0.0,1.0);
+    } else {
+        let new_intensity: f32 = pow(-dot(intersect.normal,camera_direction),2.0);
+        return vec4(new_intensity,new_intensity*intersect.mass/10.0,new_intensity,1.0);
+    }
+    /*for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let body_position: vec3<f32> = positions[i];
         let body_depth: f32 = length(body_position*camera_direction);
         let body_position_2d: vec3<f32> = body_position*camera_plane_x+body_position*camera_plane_y;
@@ -67,5 +136,5 @@ camera_position;
     } else {
         let new_intensity: f32 = pow(intensity,1.0);
         return vec4(new_intensity, new_intensity, new_intensity, 1.0);
-    }
+    }*/
 }
