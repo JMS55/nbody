@@ -42,6 +42,20 @@ struct Intersection {
     distance: f32,
     normal: vec3<f32>,
     mass: f32,
+    radius: f32,
+}
+
+
+fn color_from_intersection(intersect: Intersection,direction: vec3<f32>) -> vec4<f32> {
+    if (intersect.distance > 0.0) {
+        let intensity: f32 = 10.0*dot(intersect.normal,-direction)/intersect.distance;
+        let red: f32 = 1.0;
+        let green: f32 = intersect.radius-trunc(intersect.radius);
+        let blue: f32 = intersect.mass-trunc(intersect.mass);
+        return vec4<f32>(red*intensity,green*intensity,blue*intensity,1.0);
+    } else {
+        return vec4<f32>(0.0,0.0,0.0,1.0);
+    }
 }
 
 
@@ -52,6 +66,7 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
     var distance: f32 = -1.0;
     var normal: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
     var mass: f32 = 0.0;
+    var radius1: f32 = 0.0;
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let center: vec3<f32> = positions[i];
         //TODO: once densities are incorporated, uncomment the below formula to get an accurate radius
@@ -80,11 +95,12 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
         if (distance==-1.0 || t < distance) {
             intersection = ray_o + t * ray_d;
             distance = t;
-            normal = intersection-center;
+            normal = normalize(intersection-center);
             mass = masses[i];
+            radius1 = radius;
         }
     }
-    return Intersection(intersection,distance,normal,mass);
+    return Intersection(intersection,distance,normal,mass,radius1);
 }
 
 @fragment
@@ -92,13 +108,13 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     //PLEASE COMMENT OUT THESE TWO LINES AND UNCOMMENT THE DECLARATIONS ABOVE
     let camera_angle_elevation: vec2<f32> = vec2<f32>(0.0,0.0);
-    let camera_position: vec3<f32> = vec3<f32>(0.0,0.0,-10.0);
+    let camera_position: vec3<f32> = vec3<f32>(0.0,0.0,-20.0);
     
     
     let camera_direction: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.y)*sin(camera_angle_elevation.x),sin(camera_angle_elevation.y),cos(camera_angle_elevation.y)*cos(camera_angle_elevation.x));
     let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.x),0.0,sin(camera_angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
     let camera_plane_y: vec3<f32> = vec3<f32>(-sin(camera_angle_elevation.x)*sin(camera_angle_elevation.y),cos(camera_angle_elevation.y),cos(camera_angle_elevation.x)*sin(camera_angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
-    let window_size: vec2<f32> = vec2<f32>(20.0, 15.0);
+    let window_size: vec2<f32> = vec2<f32>(16.0, 12.0);
     let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x*uv.x, window_size.y*uv.y);
     let camera_pixel_position: vec3<f32> = relative_camera_pixel_position.x*camera_plane_x + relative_camera_pixel_position.y*camera_plane_y + 
 camera_position;
@@ -106,14 +122,11 @@ camera_position;
     // TODO: Shade pixel, for now inverse-depth
     var index_of_nearest_intersection: i32 = -1;
     var distance_of_nearest_intersection: f32 = 100000000000.0;
-    var intensity: f32 = 0.0;
     let intersect: Intersection = ray_trace(camera_pixel_position,camera_direction);
-    if (intersect.distance<0.0) {
-        return vec4(0.0,0.0,0.0,1.0);
-    } else {
-        let new_intensity: f32 = pow(-dot(intersect.normal,camera_direction),2.0);
-        return vec4(new_intensity,new_intensity*intersect.mass/10.0,new_intensity,1.0);
-    }
+    let second_intersect: Intersection = ray_trace(intersect.intersect_point,intersect.normal);
+    let first_color: vec4<f32> = color_from_intersection(intersect,camera_direction);
+    let second_color: vec4<f32> = color_from_intersection(second_intersect,intersect.normal);
+    return first_color + first_color*second_color;
     /*for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let body_position: vec3<f32> = positions[i];
         let body_depth: f32 = length(body_position*camera_direction);
