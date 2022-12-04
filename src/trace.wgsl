@@ -15,13 +15,15 @@ fn fullscreen_vertex_shader(@builtin(vertex_index) vertex_index: u32) -> Fullscr
 
 // ------------------------------------------------------------------------------------------------
 
+struct Camera {
+    position: vec3<f32>,
+    angle_elevation: vec2<f32>,
+};
+
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 @group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>;
 //@group(2) @binding(0) var<storage, read> densities: array<f32>;
-
-//PLEASE UNCOMMENT THESE TWO LINES AND COMMENT THE LINES BELOW
-//@group(2) @binding(0) var<storage, read> camera_angle_elevation: vec2<f32>;
-//@group(3) @binding(0) var<storage, read> camera_position: vec3<f32>;
+@group(2) @binding(0) var<uniform> camera: Camera;
 
 // formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
 //     formula for sphere: (position_on_surface-center_of_sphere)**2 = radius ** 2
@@ -119,20 +121,13 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
 
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-
-    //PLEASE COMMENT OUT THESE TWO LINES AND UNCOMMENT THE DECLARATIONS ABOVE
-    let camera_angle_elevation: vec2<f32> = vec2<f32>(0.0, 0.0);
-    let camera_position: vec3<f32> = vec3<f32>(0.0, 0.0, -20.0);
-
-
-    let camera_direction: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.y) * sin(camera_angle_elevation.x), sin(camera_angle_elevation.y), cos(camera_angle_elevation.y) * cos(camera_angle_elevation.x));
-    let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera_angle_elevation.x), 0.0, sin(camera_angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
-    let camera_plane_y: vec3<f32> = vec3<f32>(-sin(camera_angle_elevation.x) * sin(camera_angle_elevation.y), cos(camera_angle_elevation.y), cos(camera_angle_elevation.x) * sin(camera_angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
+    let camera_direction: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x));
+    let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.x), 0.0, sin(camera.angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
+    let camera_plane_y: vec3<f32> = vec3<f32>(-sin(camera.angle_elevation.x) * sin(camera.angle_elevation.y), cos(camera.angle_elevation.y), cos(camera.angle_elevation.x) * sin(camera.angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
     let window_size: vec2<f32> = vec2<f32>(16.0, 12.0);
     let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x * uv.x, window_size.y * uv.y);
-    let camera_pixel_position: vec3<f32> = relative_camera_pixel_position.x * camera_plane_x + relative_camera_pixel_position.y * camera_plane_y + camera_position;
-    // TODO: Loop over bodies, raycast, find closest intersection (if any)
-    // TODO: Shade pixel, for now inverse-depth
+    let camera_pixel_position: vec3<f32> = relative_camera_pixel_position.x * camera_plane_x + relative_camera_pixel_position.y * camera_plane_y + camera.position;
+
     let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_direction));
     let second_intersect: Intersection = ray_trace(first_intersect.intersect_point + normalize(first_intersect.wi) * 0.001, normalize(first_intersect.wi));
     let first_color: vec4<f32> = color_from_intersection(first_intersect);

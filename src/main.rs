@@ -1,3 +1,5 @@
+use encase::{ShaderType, UniformBuffer};
+use glam::{Vec2, Vec3};
 use std::borrow::Cow;
 use std::mem;
 use wgpu::util::*; //include some stuff outside of spec
@@ -31,9 +33,6 @@ const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
 const BASE_POSITIONS: &'static [f32; 16] = &[
     1.0, 1.0, 2.0, 0.0, 3.0, 4.0, 5.0, 0.0, 3.0, 8.0, 4.0, 0.0, 8.0, 7.0, 8.5, 0.0,
 ];
-
-static mut camera_position: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
-static mut camera_angle_elevation: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     // Setup gpu
@@ -165,6 +164,19 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 },
             ],
         });
+    let camera_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("camera_bind_group_layout"),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None, //TODO: optimize
+            },
+            count: None, //other values only for Texture, not Storage
+        }],
+    });
 
     //bind groups: mass, pos_both, vel_both
     let mass_bind_group = device.create_bind_group(&BindGroupDescriptor {
@@ -266,7 +278,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let trace_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("trace_pipeline_layout"),
-        bind_group_layouts: &[&mass_bind_group_layout, &kinematics_bind_group_layout],
+        bind_group_layouts: &[
+            &mass_bind_group_layout,
+            &kinematics_bind_group_layout,
+            &camera_bind_group_layout,
+        ],
         push_constant_ranges: &[],
     });
     let trace_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -288,150 +304,173 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         multiview: None,
     });
 
-    unsafe {
-        event_loop.run(move |event, _, control_flow| {
-            //let _ = (&instance, &adapter, &nbody_shader);
+    let mut camera = Camera::default();
 
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(size),
-                    ..
-                } => {
-                    config.width = size.width;
-                    config.height = size.height;
-                    surface.configure(&device, &config);
-                    window.request_redraw();
-                }
+    event_loop.run(move |event, _, control_flow| {
+        //let _ = (&instance, &adapter, &nbody_shader);
 
-                Event::WindowEvent {
-                    event:
-                        WindowEvent::KeyboardInput {
-                            input:
-                                KeyboardInput {
-                                    virtual_keycode: event_input,
-                                    ..
-                                },
-                            ..
-                        },
-                    ..
-                } => {
-                    let key_val = event_input;
-                    match key_val {
-                        Option::None => {}
-                        Option::Some(vkc) => {
-                            if vkc == VirtualKeyCode::Left {
-                                camera_angle_elevation[0] -= 1.0;
-                            } else if vkc == VirtualKeyCode::Right {
-                                camera_angle_elevation[0] += 1.0;
-                            } else if vkc == VirtualKeyCode::Up {
-                                camera_angle_elevation[1] += 1.0;
-                            } else if vkc == VirtualKeyCode::Down {
-                                camera_angle_elevation[1] -= 1.0;
-                            } else if vkc == VirtualKeyCode::A {
-                                camera_position[0] -= 1.0;
-                            } else if vkc == VirtualKeyCode::D {
-                                camera_position[0] += 1.0;
-                            } else if vkc == VirtualKeyCode::Q {
-                                camera_position[1] += 1.0;
-                            } else if vkc == VirtualKeyCode::E {
-                                camera_position[1] -= 1.0;
-                            } else if vkc == VirtualKeyCode::S {
-                                camera_position[2] -= 1.0;
-                            } else if vkc == VirtualKeyCode::W {
-                                camera_position[2] += 1.0;
-                            }
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                config.width = size.width;
+                config.height = size.height;
+                surface.configure(&device, &config);
+                window.request_redraw();
+            }
+
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: event_input,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => {
+                let key_val = event_input;
+                match key_val {
+                    Option::None => {}
+                    Option::Some(vkc) => {
+                        if vkc == VirtualKeyCode::Left {
+                            camera.angle_elevation.x -= 1.0;
+                        } else if vkc == VirtualKeyCode::Right {
+                            camera.angle_elevation.x += 1.0;
+                        } else if vkc == VirtualKeyCode::Up {
+                            camera.angle_elevation.y += 1.0;
+                        } else if vkc == VirtualKeyCode::Down {
+                            camera.angle_elevation.y -= 1.0;
+                        } else if vkc == VirtualKeyCode::A {
+                            camera.position.x -= 1.0;
+                        } else if vkc == VirtualKeyCode::D {
+                            camera.position.x += 1.0;
+                        } else if vkc == VirtualKeyCode::Q {
+                            camera.position.y += 1.0;
+                        } else if vkc == VirtualKeyCode::E {
+                            camera.position.y -= 1.0;
+                        } else if vkc == VirtualKeyCode::S {
+                            camera.position.z -= 1.0;
+                        } else if vkc == VirtualKeyCode::W {
+                            camera.position.z += 1.0;
                         }
                     }
                 }
-
-                // Update simulation (nbody.wgsl)
-                Event::MainEventsCleared => {
-                    //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
-
-                    let mut nbody_step_cmd_encoder =
-                        device.create_command_encoder(&CommandEncoderDescriptor {
-                            label: Some("nbody_step_cmd_encoder"),
-                        });
-                    {
-                        //code block because we want lifetime of compute pass to end after
-                        let mut nbody_step_pass =
-                            nbody_step_cmd_encoder.begin_compute_pass(&ComputePassDescriptor {
-                                label: Some("nbody_step_pass"),
-                            });
-                        //now that we've initialized: set_pipeline, set_bind_group, dispatch_workgroups
-                        nbody_step_pass.set_pipeline(&nbody_pipeline);
-                        nbody_step_pass.set_bind_group(MASS_GROUP, &mass_bind_group, &[]);
-                        nbody_step_pass.set_bind_group(
-                            KINEMATICS_IN_GROUP,
-                            &kinematics_bind_group_a,
-                            &[],
-                        );
-                        nbody_step_pass.set_bind_group(
-                            KINEMATICS_OUT_GROUP,
-                            &kinematics_bind_group_b,
-                            &[],
-                        );
-                        //dispatch!
-                        //can use dispatch_workgroups_indirect to use GPU to compute clustering
-                        //then the GPU can determine n_workgroups from an in-GPU buffer without copy-paste
-                        let n_workgroups: u32 =
-                            (((N_BODIES as f32) / (WG_SIZE as f32)).ceil()) as u32;
-                        //TODO: probably something else...
-                        //at minimum: spread across x,y,z to support more than like, 2^22 bodies
-                        nbody_step_pass.dispatch_workgroups(n_workgroups, 1, 1);
-                    }
-                    //submit command encoder to queue
-                    let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
-
-                    //swap groups a and b to alternate I/O
-                    mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
-
-                    window.request_redraw();
-                }
-
-                // Render (trace.wgsl)
-                Event::RedrawRequested(_) => {
-                    let frame = surface.get_current_texture().unwrap();
-                    let view = frame.texture.create_view(&TextureViewDescriptor::default());
-                    let mut trace_cmd_encoder =
-                        device.create_command_encoder(&CommandEncoderDescriptor {
-                            label: Some("trace_cmd_encoder"),
-                        });
-
-                    {
-                        let mut trace_pass =
-                            trace_cmd_encoder.begin_render_pass(&RenderPassDescriptor {
-                                label: Some("trace_pass"),
-                                color_attachments: &[Some(RenderPassColorAttachment {
-                                    view: &view,
-                                    resolve_target: None,
-                                    ops: Operations::default(),
-                                })],
-                                depth_stencil_attachment: None,
-                            });
-                        trace_pass.set_pipeline(&trace_pipeline);
-                        trace_pass.set_bind_group(0, &mass_bind_group, &[]);
-                        trace_pass.set_bind_group(1, &kinematics_bind_group_b, &[]);
-                        trace_pass.draw(0..3, 0..1);
-                    }
-
-                    queue.submit(Some(trace_cmd_encoder.finish()));
-                    frame.present();
-                }
-
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => *control_flow = ControlFlow::Exit,
-
-                _ => {}
             }
-        });
-    }
+
+            // Update simulation (nbody.wgsl)
+            Event::MainEventsCleared => {
+                //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
+
+                let mut nbody_step_cmd_encoder =
+                    device.create_command_encoder(&CommandEncoderDescriptor {
+                        label: Some("nbody_step_cmd_encoder"),
+                    });
+                {
+                    //code block because we want lifetime of compute pass to end after
+                    let mut nbody_step_pass =
+                        nbody_step_cmd_encoder.begin_compute_pass(&ComputePassDescriptor {
+                            label: Some("nbody_step_pass"),
+                        });
+                    //now that we've initialized: set_pipeline, set_bind_group, dispatch_workgroups
+                    nbody_step_pass.set_pipeline(&nbody_pipeline);
+                    nbody_step_pass.set_bind_group(MASS_GROUP, &mass_bind_group, &[]);
+                    nbody_step_pass.set_bind_group(
+                        KINEMATICS_IN_GROUP,
+                        &kinematics_bind_group_a,
+                        &[],
+                    );
+                    nbody_step_pass.set_bind_group(
+                        KINEMATICS_OUT_GROUP,
+                        &kinematics_bind_group_b,
+                        &[],
+                    );
+                    //dispatch!
+                    //can use dispatch_workgroups_indirect to use GPU to compute clustering
+                    //then the GPU can determine n_workgroups from an in-GPU buffer without copy-paste
+                    let n_workgroups: u32 = (((N_BODIES as f32) / (WG_SIZE as f32)).ceil()) as u32;
+                    //TODO: probably something else...
+                    //at minimum: spread across x,y,z to support more than like, 2^22 bodies
+                    nbody_step_pass.dispatch_workgroups(n_workgroups, 1, 1);
+                }
+                //submit command encoder to queue
+                let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
+
+                //swap groups a and b to alternate I/O
+                mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
+
+                window.request_redraw();
+            }
+
+            // Render (trace.wgsl)
+            Event::RedrawRequested(_) => {
+                let frame = surface.get_current_texture().unwrap();
+                let view = frame.texture.create_view(&TextureViewDescriptor::default());
+                let mut trace_cmd_encoder =
+                    device.create_command_encoder(&CommandEncoderDescriptor {
+                        label: Some("trace_cmd_encoder"),
+                    });
+
+                let mut camera_buffer = UniformBuffer::new(Vec::new());
+                camera_buffer.write(&camera).unwrap();
+                let camera_buffer = camera_buffer.into_inner();
+                let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
+                    label: Some("camera_buffer"),
+                    contents: bytemuck::cast_slice(&camera_buffer),
+                    usage: BufferUsages::UNIFORM,
+                });
+                let camera_bind_group = device.create_bind_group(&BindGroupDescriptor {
+                    label: Some("camera_bind_group"),
+                    layout: &camera_bind_group_layout,
+                    entries: &[BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer.as_entire_binding(),
+                    }],
+                });
+
+                {
+                    let mut trace_pass =
+                        trace_cmd_encoder.begin_render_pass(&RenderPassDescriptor {
+                            label: Some("trace_pass"),
+                            color_attachments: &[Some(RenderPassColorAttachment {
+                                view: &view,
+                                resolve_target: None,
+                                ops: Operations::default(),
+                            })],
+                            depth_stencil_attachment: None,
+                        });
+                    trace_pass.set_pipeline(&trace_pipeline);
+                    trace_pass.set_bind_group(0, &mass_bind_group, &[]);
+                    trace_pass.set_bind_group(1, &kinematics_bind_group_b, &[]);
+                    trace_pass.set_bind_group(2, &camera_bind_group, &[]);
+                    trace_pass.draw(0..3, 0..1);
+                }
+
+                queue.submit(Some(trace_cmd_encoder.finish()));
+                frame.present();
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => *control_flow = ControlFlow::Exit,
+
+            _ => {}
+        }
+    });
 }
 
 fn main() {
     let event_loop = EventLoop::new();
     let window = Window::new(&event_loop).unwrap();
     pollster::block_on(run(event_loop, window));
+}
+
+#[derive(ShaderType, Default)]
+struct Camera {
+    position: Vec3,
+    angle_elevation: Vec2,
 }
