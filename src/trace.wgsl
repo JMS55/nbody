@@ -152,12 +152,18 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
             }
             let diffuse_normal_direction: vec3<f32> = normalize(diffuse_direction);
             let radius: f32 = pow(masses[i], 1.0 / 3.0) / 4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
-            let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.01,diffuse_normal_direction);
-            if (diffuse_intersect.distance >= (length(diffuse_direction) - radius - 0.01)) && (diffuse_intersect.distance <= (length(diffuse_direction) + radius + 0.01)) {second_diffuse_color += color_from_intersection(diffuse_intersect);}
+            let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.001,diffuse_normal_direction);
+            if diffuse_intersect.distance < 0.0 {
+                continue;
+            }
+            if length(diffuse_intersect.intersect_point-positions[i]) > (radius+0.001) {
+                continue;
+            }
+            second_diffuse_color += color_from_intersection(diffuse_intersect);
         }
     } 
     //second_diffuse_color /= f32(num_diffuse_samples);
-    second_diffuse_color.w = 1.0;
+    second_diffuse_color.a = 1.0;
     let first_color: vec4<f32> = color_from_intersection(first_intersect);
     let second_color: vec4<f32> = color_from_intersection(second_intersect);
     if first_intersect.distance < 0.0 {
@@ -165,6 +171,6 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     } else if second_intersect.distance < 0.0 {
         return first_color + first_color * second_diffuse_color;
     } else {
-        return first_color + first_color * second_color + first_color * second_diffuse_color;
+        return first_color + first_color * (second_color + second_diffuse_color);
     }
 }
