@@ -119,17 +119,38 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
     return Intersection(intersection, distance, normal, mass, radius1, wi, wo);
 }
 
+fn sample_cosine_hemisphere(normal: vec3<f32>) -> vec3<f32> {
+    return normal;
+}
+
+fn pdf_cosine_hemisphere(normal: vec3<f32>) -> f32 {
+    return dot(normal,normal);
+}
+
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+    let num_diffuse_samples: u32 = 0u; //when set to 0, all lighting of spheres is determined by specular reflection
+    let basic_diffuse: bool = false; //if true, will just implement diffuse by testing normal between a line to light-sphere and the point being colored
+    //basic diffuse is much faster, but not physically accurate, as it doesn't account for occlusion
     let camera_direction: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x));
+    let focal_point: vec3<f32> = camera.position - camera_direction*1.0;
     let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.x), 0.0, sin(camera.angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
-    let camera_plane_y: vec3<f32> = vec3<f32>(-sin(camera.angle_elevation.x) * sin(camera.angle_elevation.y), cos(camera.angle_elevation.y), cos(camera.angle_elevation.x) * sin(camera.angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
-    let window_size: vec2<f32> = vec2<f32>(16.0, 12.0);
+    let camera_plane_y: vec3<f32> = cross(camera_plane_x,camera_direction);//vec3<f32>(-sin(camera.angle_elevation.x) * sin(camera.angle_elevation.y), cos(camera.angle_elevation.y), cos(camera.angle_elevation.x) * sin(camera.angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
+    let window_size: vec2<f32> = vec2<f32>(1.0, 1.0);
     let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x * uv.x, window_size.y * uv.y);
-    let camera_pixel_position: vec3<f32> = relative_camera_pixel_position.x * camera_plane_x + relative_camera_pixel_position.y * camera_plane_y + camera.position;
+    let camera_pixel_position: vec3<f32> = (relative_camera_pixel_position.x * 2.0 - 1.0) * camera_plane_x + (relative_camera_pixel_position.y * 2.0 - 1.0) * camera_plane_y + camera.position;
+    let camera_ray_direction: vec3<f32> = normalize(camera_pixel_position-focal_point);
 
-    let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_direction));
+    let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_ray_direction));
     let second_intersect: Intersection = ray_trace(first_intersect.intersect_point + normalize(first_intersect.wi) * 0.001, normalize(first_intersect.wi));
+    var second_diffuse_color: vec4<f32> = vec4<f32>(0.0,0.0,0.0,0.0);
+    for (var i: u32 = 0u; i < num_diffuse_samples; i++) {
+        let diffuse_direction: vec3<f32> = sample_cosine_hemisphere(first_intersect.normal);
+        let second_diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_direction*0.001,diffuse_direction);
+        second_diffuse_color += color_from_intersection(second_diffuse_intersect)*pdf_cosine_hemisphere(first_intersect.normal);
+    }
+    second_diffuse_color.w = 1.0;
+    second_diffuse_color /= f32(num_diffuse_samples);
     let first_color: vec4<f32> = color_from_intersection(first_intersect);
     let second_color: vec4<f32> = color_from_intersection(second_intersect);
     if first_intersect.distance < 0.0 {
@@ -137,6 +158,6 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     } else if second_intersect.distance < 0.0 {
         return first_color;
     } else {
-        return first_color + first_color * second_color;
+        return first_color + first_color * second_color;// + first_color * second_diffuse_color;
     }
 }
