@@ -143,21 +143,28 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_ray_direction));
     let second_intersect: Intersection = ray_trace(first_intersect.intersect_point + normalize(first_intersect.wi) * 0.001, normalize(first_intersect.wi));
-    var second_diffuse_color: vec4<f32> = vec4<f32>(0.0,0.0,0.0,0.0);
-    for (var i: u32 = 0u; i < num_diffuse_samples; i++) {
-        let diffuse_direction: vec3<f32> = sample_cosine_hemisphere(first_intersect.normal);
-        let second_diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_direction*0.001,diffuse_direction);
-        second_diffuse_color += color_from_intersection(second_diffuse_intersect)*pdf_cosine_hemisphere(first_intersect.normal);
-    }
+    var second_diffuse_color: vec4<f32> = vec4<f32>(0.0,0.0,0.0,1.0);
+    if first_intersect.distance >= 0.0 {
+        for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
+            let diffuse_direction: vec3<f32> = positions[i]-first_intersect.intersect_point;
+            if dot(diffuse_direction,first_intersect.normal) < 0.0 {
+                continue;
+            }
+            let diffuse_normal_direction: vec3<f32> = normalize(diffuse_direction);
+            let radius: f32 = pow(masses[i], 1.0 / 3.0) / 4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
+            let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.01,diffuse_normal_direction);
+            if (diffuse_intersect.distance >= (length(diffuse_direction) - radius - 0.01)) && (diffuse_intersect.distance <= (length(diffuse_direction) + radius + 0.01)) {second_diffuse_color += color_from_intersection(diffuse_intersect);}
+        }
+    } 
+    //second_diffuse_color /= f32(num_diffuse_samples);
     second_diffuse_color.w = 1.0;
-    second_diffuse_color /= f32(num_diffuse_samples);
     let first_color: vec4<f32> = color_from_intersection(first_intersect);
     let second_color: vec4<f32> = color_from_intersection(second_intersect);
     if first_intersect.distance < 0.0 {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     } else if second_intersect.distance < 0.0 {
-        return first_color;
+        return first_color + first_color * second_diffuse_color;
     } else {
-        return first_color + first_color * second_color;// + first_color * second_diffuse_color;
+        return first_color + first_color * second_color + first_color * second_diffuse_color;
     }
 }
