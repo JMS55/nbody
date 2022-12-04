@@ -337,13 +337,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     Option::None => {}
                     Option::Some(vkc) => {
                         if vkc == VirtualKeyCode::Left {
-                            camera.angle_elevation.x -= 1.0;
+                            camera.angle_elevation.x -= 0.1;
                         } else if vkc == VirtualKeyCode::Right {
-                            camera.angle_elevation.x += 1.0;
+                            camera.angle_elevation.x += 0.1;
                         } else if vkc == VirtualKeyCode::Up {
-                            camera.angle_elevation.y += 1.0;
+                            camera.angle_elevation.y += 0.1;
                         } else if vkc == VirtualKeyCode::Down {
-                            camera.angle_elevation.y -= 1.0;
+                            camera.angle_elevation.y -= 0.1;
                         } else if vkc == VirtualKeyCode::A {
                             camera.position.x -= 1.0;
                         } else if vkc == VirtualKeyCode::D {
