@@ -43,12 +43,16 @@ struct Intersection {
     normal: vec3<f32>,
     mass: f32,
     radius: f32,
+    wi: vec3<f32>,
+    wo: vec3<f32>,
 }
 
 
-fn color_from_intersection(intersect: Intersection,direction: vec3<f32>) -> vec4<f32> {
-    if (intersect.distance > 0.0) {
-        let intensity: f32 = 10.0*dot(intersect.normal,-direction)/intersect.distance;
+fn color_from_intersection(intersect: Intersection) -> vec4<f32> {
+    //return vec4<f32>(intersect.normal,1.0);
+    if (intersect.distance >= 0.0) {
+        let intensity: f32 = dot(intersect.normal,intersect.wo)/intersect.distance;
+        //return vec4<f32>(intensity,intensity,intensity,1.0);
         let red: f32 = 1.0;
         let green: f32 = intersect.radius-trunc(intersect.radius);
         let blue: f32 = intersect.mass-trunc(intersect.mass);
@@ -62,17 +66,18 @@ fn color_from_intersection(intersect: Intersection,direction: vec3<f32>) -> vec4
 
 //JASMINE: feel free to modify this if you import an acceleration structure as a uniform; for now it just loops over the spheres
 fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> is position of intersection, distance is 
+    let PI: f32 = 3.14159265358;
+    let wo: vec3<f32> = -normalize(ray_d);
     var intersection: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
     var distance: f32 = -1.0;
     var normal: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
     var mass: f32 = 0.0;
     var radius1: f32 = 0.0;
+    var wi: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let center: vec3<f32> = positions[i];
         //TODO: once densities are incorporated, uncomment the below formula to get an accurate radius
         let radius: f32 = pow(masses[i],1.0/3.0)/4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
-        let d: vec3<f32> = ray_d;
-        let p: vec3<f32> = ray_o;
         let A: f32 = dot(ray_d,ray_d);
         let B: f32 = 2.0 * dot(ray_o,ray_d) - 2.0 * dot(center,ray_d);
         let C: f32 = dot(ray_o,ray_o) + dot(center,center) - 2.0 * dot(ray_o,center) - pow(radius,2.0);
@@ -80,32 +85,41 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
         if (square_root_term <= 0.0) {
             continue;
         }
-        let tplus: f32 = (-B + square_root_term) / (2.0 * A);
-        let tminus: f32 = (-B - square_root_term) / (2.0 * A);
+        let tplus: f32 = (-B + sqrt(square_root_term)) / (2.0 * A);
+        let tminus: f32 = (-B - sqrt(square_root_term)) / (2.0 * A);
         let t: f32 = tminus;
-        /*var t:f32;
-        if (tminus > 0.0) {
-            t = tminus;
-        } else {
-            t = tplus;
-        }*/
+        //var t:f32;
+        //if (tminus > 0.0) {
+        //    t = tminus;
+        //} else {
+        //    t = tplus;
+        //}
         if (t<0.0) {
             continue;
         }
-        if (distance==-1.0 || t < distance) {
+        if (distance<0.0 || t < distance) {
             intersection = ray_o + t * ray_d;
             distance = t;
             normal = normalize(intersection-center);
             mass = masses[i];
             radius1 = radius;
+            //let quaternion_d: vec4<f32> = vec4<f32>(0.0,wo);
+            //let quaternion_rot: vec4<f32> = vec4<f32>(cos(PI/2.0),normal.x*sin(PI/2.0),normal.y*sin(PI/2.0),normal.z*sin(PI/2.0));
+            //let quaternion_conj: vec4<f32> = vec4<f32>(quaternion_rot.x,-quaternion_rot.yzw);
+            let perpendicular_a: vec3<f32> = normalize(cross(normal,wo));
+            let perpendicular_b: vec3<f32> = normalize(cross(normal,perpendicular_a));
+            let perpendicular_wo: vec3<f32> = dot(perpendicular_b,wo)*perpendicular_b;
+            let dot_wo: vec3<f32> = dot(wo,normal)*normal;
+            wi = normalize(-perpendicular_wo+dot_wo);
+            //wi = normalize(((quaternion_rot*quaternion_d)*quaternion_conj).yzw);
         }
     }
-    return Intersection(intersection,distance,normal,mass,radius1);
+    return Intersection(intersection,distance,normal,mass,radius1,wi,wo);
 }
 
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-
+    
     //PLEASE COMMENT OUT THESE TWO LINES AND UNCOMMENT THE DECLARATIONS ABOVE
     let camera_angle_elevation: vec2<f32> = vec2<f32>(0.0,0.0);
     let camera_position: vec3<f32> = vec3<f32>(0.0,0.0,-20.0);
@@ -120,34 +134,15 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 camera_position;
     // TODO: Loop over bodies, raycast, find closest intersection (if any)
     // TODO: Shade pixel, for now inverse-depth
-    var index_of_nearest_intersection: i32 = -1;
-    var distance_of_nearest_intersection: f32 = 100000000000.0;
-    let intersect: Intersection = ray_trace(camera_pixel_position,camera_direction);
-    let second_intersect: Intersection = ray_trace(intersect.intersect_point,intersect.normal);
-    let first_color: vec4<f32> = color_from_intersection(intersect,camera_direction);
-    let second_color: vec4<f32> = color_from_intersection(second_intersect,intersect.normal);
-    return first_color + first_color*second_color;
-    /*for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
-        let body_position: vec3<f32> = positions[i];
-        let body_depth: f32 = length(body_position*camera_direction);
-        let body_position_2d: vec3<f32> = body_position*camera_plane_x+body_position*camera_plane_y;
-        let body_density: f32 = 1.0; //densities[i];
-	//let body_radius: f32 = masses[i]/body_density; //yep, once implemented, this'll be good
-	let body_radius: f32 = (0.1f*log2((2.0f+masses[i]))); //for now, do this to control density a bit
-        let offset_2d: vec3<f32> = camera_pixel_position-body_position_2d;
-        let intersection_normal : vec3<f32> = offset_2d/body_radius+camera_direction*sin(acos(length(offset_2d/body_radius)));
-        let intersection : vec3<f32> = intersection_normal*body_radius;
-        let intersection_depth : f32 = length(intersection*camera_direction);
-        if (length(offset_2d)<body_radius && (body_depth-intersection_depth) < distance_of_nearest_intersection) {
-          index_of_nearest_intersection = i32(i);
-          distance_of_nearest_intersection = body_depth-intersection_depth;
-          intensity = dot(intersection_normal,camera_direction);
-        }
-    }
-    if index_of_nearest_intersection == -1 {
-        return vec4(0.0, 0.0, 0.0, 1.0);
+    let first_intersect: Intersection = ray_trace(camera_pixel_position,normalize(camera_direction));
+    let second_intersect: Intersection = ray_trace(first_intersect.intersect_point+normalize(first_intersect.wi)*0.001,normalize(first_intersect.wi));
+    let first_color: vec4<f32> = color_from_intersection(first_intersect);
+    let second_color: vec4<f32> = color_from_intersection(second_intersect);
+    if (first_intersect.distance < 0.0) {
+        return vec4<f32>(0.0,0.0,0.0,1.0);
+    } else if (second_intersect.distance < 0.0) {
+        return first_color;
     } else {
-        let new_intensity: f32 = pow(intensity,1.0);
-        return vec4(new_intensity, new_intensity, new_intensity, 1.0);
-    }*/
+        return first_color+first_color*second_color;
+    }
 }
