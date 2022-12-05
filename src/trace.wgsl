@@ -22,8 +22,8 @@ struct Camera {
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 @group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>;
-//@group(2) @binding(0) var<storage, read> densities: array<f32>;
 @group(2) @binding(0) var<uniform> camera: Camera;
+@group(3) @binding(0) var<storage, read> densities: array<f32>;
 
 // formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
 //     formula for sphere: (position_on_surface-center_of_sphere)**2 = radius ** 2
@@ -49,6 +49,7 @@ struct Intersection {
     wo: vec3<f32>,
 }
 
+let PI: f32 = 3.14159265358;
 
 fn color_from_intersection(intersect: Intersection) -> vec4<f32> {
     //return vec4<f32>(intersect.normal,1.0);
@@ -68,7 +69,7 @@ fn color_from_intersection(intersect: Intersection) -> vec4<f32> {
 
 //JASMINE: feel free to modify this if you import an acceleration structure as a uniform; for now it just loops over the spheres
 fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> is position of intersection, distance is
-    let PI: f32 = 3.14159265358;
+    //let PI: f32 = 3.14159265358;
     let wo: vec3<f32> = -normalize(ray_d);
     var intersection: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     var distance: f32 = -1.0;
@@ -79,7 +80,7 @@ fn ray_trace(ray_o: vec3<f32>, ray_d: vec3<f32>) -> Intersection { //vec3<f32> i
     for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
         let center: vec3<f32> = positions[i];
         //TODO: once densities are incorporated, uncomment the below formula to get an accurate radius
-        let radius: f32 = pow(masses[i], 1.0 / 3.0) / 4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
+        let radius: f32 = pow(3.0/4.0*(masses[i] / densities[i])/PI,1.0/3.0); //inverse formula for sphere volume //pow(masses[i], 1.0 / 3.0) / 4.0;//
         let A: f32 = dot(ray_d, ray_d);
         let B: f32 = 2.0 * dot(ray_o, ray_d) - 2.0 * dot(center, ray_d);
         let C: f32 = dot(ray_o, ray_o) + dot(center, center) - 2.0 * dot(ray_o, center) - pow(radius, 2.0);
@@ -129,8 +130,10 @@ fn pdf_cosine_hemisphere(normal: vec3<f32>) -> f32 {
 
 @fragment
 fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-    let num_diffuse_samples: u32 = 0u; //when set to 0, all lighting of spheres is determined by specular reflection
-    let basic_diffuse: bool = false; //if true, will just implement diffuse by testing normal between a line to light-sphere and the point being colored
+    let brute_force_diffuse: bool = true;
+    let num_diffuse_samples: u32 = 0u; //when set to 0, all lighting of spheres is determined by specular reflection unless brute_force_diffuse is true
+    //must be odd number greater than or equal to 1
+    //let basic_diffuse: bool = false; //if true, will just implement diffuse by testing normal between a line to light-sphere and the point being colored
     //basic diffuse is much faster, but not physically accurate, as it doesn't account for occlusion
     let camera_direction: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x));
     let focal_point: vec3<f32> = camera.position - camera_direction*1.0;
@@ -144,24 +147,42 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_ray_direction));
     let second_intersect: Intersection = ray_trace(first_intersect.intersect_point + normalize(first_intersect.wi) * 0.001, normalize(first_intersect.wi));
     var second_diffuse_color: vec4<f32> = vec4<f32>(0.0,0.0,0.0,1.0);
-    if first_intersect.distance >= 0.0 {
-        for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
-            let diffuse_direction: vec3<f32> = positions[i]-first_intersect.intersect_point;
-            if dot(diffuse_direction,first_intersect.normal) < 0.0 {
-                continue;
+    if brute_force_diffuse {
+        if first_intersect.distance >= 0.0 {
+            for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
+                let diffuse_direction: vec3<f32> = positions[i]-first_intersect.intersect_point;
+                if dot(diffuse_direction,first_intersect.normal) < 0.0 {
+                    continue;
+                }
+                let diffuse_normal_direction: vec3<f32> = normalize(diffuse_direction);
+                let radius: f32 = pow(3.0/4.0*(masses[i] / densities[i])/PI,1.0/3.0); //inverse formula for sphere volume //pow(masses[i], 1.0 / 3.0) / 4.0;//
+                let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.001,diffuse_normal_direction);
+                if diffuse_intersect.distance < 0.0 {
+                    continue;
+                }
+                if length(diffuse_intersect.intersect_point-positions[i]) > (radius+0.001) {
+                    continue;
+                }
+                second_diffuse_color += color_from_intersection(diffuse_intersect);
             }
-            let diffuse_normal_direction: vec3<f32> = normalize(diffuse_direction);
-            let radius: f32 = pow(masses[i], 1.0 / 3.0) / 4.0;//pow(3.0/4.0*(masses[i] / densities[i])/exp(1.0),1.0/3.0); //inverse formula for sphere volume
-            let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.001,diffuse_normal_direction);
-            if diffuse_intersect.distance < 0.0 {
-                continue;
-            }
-            if length(diffuse_intersect.intersect_point-positions[i]) > (radius+0.001) {
-                continue;
-            }
-            second_diffuse_color += color_from_intersection(diffuse_intersect);
         }
-    } 
+    } else {
+        if num_diffuse_samples != 0u {
+            for (var i: u32 = 1u; i <= num_diffuse_samples; i++) {
+                let u: f32 = f32(i)/f32(num_diffuse_samples+1u) - 0.5;
+                for (var j: u32 = 1u; j <= num_diffuse_samples; j++) {
+                    let v: f32 = f32(j)/f32(num_diffuse_samples+1u) - 0.5;
+                    let diffuse_direction: vec3<f32> = vec3<f32>(sin(u)*cos(v),cos(u)*cos(v),cos(u)*sin(v));
+                    let diffuse_normal_direction: vec3<f32> = normalize(diffuse_direction);
+                    let diffuse_intersect: Intersection = ray_trace(first_intersect.intersect_point+diffuse_normal_direction * 0.001,diffuse_normal_direction);
+                    if diffuse_intersect.distance < 0.0 {
+                        continue;
+                    }
+                    second_diffuse_color += color_from_intersection(diffuse_intersect);
+                }
+            }
+        }
+    }
     //second_diffuse_color /= f32(num_diffuse_samples);
     second_diffuse_color.a = 1.0;
     let first_color: vec4<f32> = color_from_intersection(first_intersect);
