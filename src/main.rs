@@ -2,6 +2,7 @@ use encase::{ShaderType, UniformBuffer};
 use glam::{Vec2, Vec3};
 use std::borrow::Cow;
 use std::mem;
+use std::time::{Duration,Instant};
 use wgpu::util::*; //include some stuff outside of spec
 use wgpu::*;
 use winit::{
@@ -487,6 +488,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
             // Render (trace.wgsl)
             Event::RedrawRequested(_) => {
+                static mut running_average_time_render: Duration = Duration::new(0,0);
+                static mut number_frames_rendered: u32 = 0;
+                let start_time: Instant = Instant::now();
                 let frame = surface.get_current_texture().unwrap();
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
                 let mut trace_cmd_encoder =
@@ -533,6 +537,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                 queue.submit(Some(trace_cmd_encoder.finish()));
                 frame.present();
+                let new_time: Instant = Instant::now();
+                println!("Current Frame Time: {:?}", new_time.duration_since(start_time));
+                unsafe {
+                    running_average_time_render = (running_average_time_render*number_frames_rendered+new_time.duration_since(start_time))/(number_frames_rendered+1);
+                    number_frames_rendered += 1;
+                    println!("Average Frame Time: {:?}", running_average_time_render);
+                }
             }
 
             Event::WindowEvent {
