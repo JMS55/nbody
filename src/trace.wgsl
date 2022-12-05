@@ -136,11 +136,39 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     //must be odd number greater than or equal to 1
     //let basic_diffuse: bool = false; //if true, will just implement diffuse by testing normal between a line to light-sphere and the point being colored
     //basic diffuse is much faster, but not physically accurate, as it doesn't account for occlusion
-    let camera_direction: vec3<f32> = normalize(vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x)));
+    
+    let vertical_direction: f32 = sin(camera.angle_elevation.y);
+    let horizontal_direction: vec2<f32> = vec2<f32>(sin(camera.angle_elevation.x),cos(camera.angle_elevation.x));
+    let scaled_horz_direction: vec2<f32> = horizontal_direction*cos(camera.angle_elevation.y);
+    let aspect_ratio: f32 = 0.75;
+    
+    //Y is vertical, Z is front-back
+    let camera_direction: vec3<f32> = normalize(vec3<f32>(scaled_horz_direction.x, vertical_direction, scaled_horz_direction.y));
+    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(-horizontal_direction.y, 0.0, horizontal_direction.x));
+    let camera_plane_y: vec3<f32> = normalize(vec3<f32>(-vertical_direction*horizontal_direction.x,cos(camera.angle_elevation.y),-vertical_direction*horizontal_direction.y));
+    //return (dot(camera_direction,camera_plane_x)+dot(camera_direction,camera_plane_y)+dot(camera_plane_x,camera_plane_y))*vec4<f32>(1.0,1.0,1.0,1.0);
+    //
+    //normalize(cross(camera_plane_x,camera_direction));
+    
+    
+    //Y is front-back, Z is vertical
+    /*let camera_direction: vec3<f32> = normalize(vec3<f32>(scaled_horz_direction.x, scaled_horz_direction.y, vertical_direction));
+    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(horizontal_direction.y, horizontal_direction.x,0.0));
+    let camera_plane_y: vec3<f32> = normalize(cross(camera_plane_x,camera_direction));*/
+    
+    //Y is left-right, Z is vertical
+    /*let camera_direction: vec3<f32> = normalize(vec3<f32>(scaled_horz_direction.y, scaled_horz_direction.x, vertical_direction));
+    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(horizontal_direction.x, horizontal_direction.y,0.0));
+    let camera_plane_y: vec3<f32> = normalize(cross(camera_plane_x,camera_direction));*/
+    
+    //Y is vertical, Z is left-right
+    /*let camera_direction: vec3<f32> = normalize(vec3<f32>(scaled_horz_direction.y, vertical_direction, scaled_horz_direction.x));
+    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(horizontal_direction.x, horizontal_direction.y,0.0));
+    let camera_plane_y: vec3<f32> = normalize(cross(camera_plane_x,camera_direction));*/
+    
+    
     let focal_point: vec3<f32> = camera.position - camera_direction*0.5;
-    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(cos(camera.angle_elevation.x), 0.0, sin(camera.angle_elevation.x))); //points in the direction in world space that the x-axis of the camera lens is in
-    let camera_plane_y: vec3<f32> = cross(camera_plane_x,camera_direction);//vec3<f32>(-sin(camera.angle_elevation.x) * sin(camera.angle_elevation.y), cos(camera.angle_elevation.y), cos(camera.angle_elevation.x) * sin(camera.angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
-    let relative_camera_pixel_position: vec2<f32> = vec2<f32>(uv.x,uv.y) * 2.0 - 1.0;
+    let relative_camera_pixel_position: vec2<f32> = vec2<f32>(uv.x*2.0 - 1.0,uv.y*aspect_ratio*2.0 - aspect_ratio);
     let camera_pixel_position: vec3<f32> = (relative_camera_pixel_position.x) * camera_plane_x + (relative_camera_pixel_position.y) * camera_plane_y + camera.position;
     let camera_ray_direction: vec3<f32> = normalize(camera_pixel_position-focal_point);
 
