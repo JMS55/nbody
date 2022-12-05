@@ -22,7 +22,7 @@ const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 const ACC_BINDING: u32 = 2; //bindings, not the bind groups
 const DENSITIES_BINDING: u32 = 0;
-const EMITTERS_BINDING: u32 = 0;
+const EMITTERS_BINDING: u32 = 1;
 
 const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
 const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0];
@@ -139,6 +139,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 min_binding_size: None, //TODO: optimize
             },
             count: None, //other values only for Texture, not Storage
+        },
+        BindGroupLayoutEntry {
+            binding: EMITTERS_BINDING,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage {read_only: true},
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
         }],
     });
     
@@ -234,6 +244,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 size: None,
             }),*/
             resource: mass_buffer.as_entire_binding(),
+        },
+        BindGroupEntry {
+            binding: EMITTERS_BINDING,
+            resource: emitters_buffer.as_entire_binding(),
         }],
     });
     
