@@ -411,9 +411,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         } else if vkc == VirtualKeyCode::Down {
                             camera.angle_elevation.y -= 0.1;
                         } else if vkc == VirtualKeyCode::A {
-                            camera.position = camera.position -(camera_plane_x);
+                            camera.position = camera.position +(camera_plane_x);
                         } else if vkc == VirtualKeyCode::D {
-                            camera.position = camera.position + (camera_plane_x);
+                            camera.position = camera.position - (camera_plane_x);
                         } else if vkc == VirtualKeyCode::Q {
                             camera.position = camera.position - (camera_plane_y);
                         } else if vkc == VirtualKeyCode::E {
