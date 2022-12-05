@@ -136,13 +136,12 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     //must be odd number greater than or equal to 1
     //let basic_diffuse: bool = false; //if true, will just implement diffuse by testing normal between a line to light-sphere and the point being colored
     //basic diffuse is much faster, but not physically accurate, as it doesn't account for occlusion
-    let camera_direction: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x));
-    let focal_point: vec3<f32> = camera.position - camera_direction*1.0;
-    let camera_plane_x: vec3<f32> = vec3<f32>(cos(camera.angle_elevation.x), 0.0, sin(camera.angle_elevation.x)); //points in the direction in world space that the x-axis of the camera lens is in
+    let camera_direction: vec3<f32> = normalize(vec3<f32>(cos(camera.angle_elevation.y) * sin(camera.angle_elevation.x), sin(camera.angle_elevation.y), cos(camera.angle_elevation.y) * cos(camera.angle_elevation.x)));
+    let focal_point: vec3<f32> = camera.position - camera_direction*0.5;
+    let camera_plane_x: vec3<f32> = normalize(vec3<f32>(cos(camera.angle_elevation.x), 0.0, sin(camera.angle_elevation.x))); //points in the direction in world space that the x-axis of the camera lens is in
     let camera_plane_y: vec3<f32> = cross(camera_plane_x,camera_direction);//vec3<f32>(-sin(camera.angle_elevation.x) * sin(camera.angle_elevation.y), cos(camera.angle_elevation.y), cos(camera.angle_elevation.x) * sin(camera.angle_elevation.y)); //points in the direction in world space that the y-axis of the camera lens is in
-    let window_size: vec2<f32> = vec2<f32>(1.0, 1.0);
-    let relative_camera_pixel_position: vec2<f32> = vec2<f32>(window_size.x * uv.x, window_size.y * uv.y);
-    let camera_pixel_position: vec3<f32> = (relative_camera_pixel_position.x * 2.0 - 1.0) * camera_plane_x + (relative_camera_pixel_position.y * 2.0 - 1.0) * camera_plane_y + camera.position;
+    let relative_camera_pixel_position: vec2<f32> = vec2<f32>(uv.x,uv.y) * 2.0 - 1.0;
+    let camera_pixel_position: vec3<f32> = (relative_camera_pixel_position.x) * camera_plane_x + (relative_camera_pixel_position.y) * camera_plane_y + camera.position;
     let camera_ray_direction: vec3<f32> = normalize(camera_pixel_position-focal_point);
 
     let first_intersect: Intersection = ray_trace(camera_pixel_position, normalize(camera_ray_direction));
