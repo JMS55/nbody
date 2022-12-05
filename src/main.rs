@@ -22,9 +22,11 @@ const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 const ACC_BINDING: u32 = 2; //bindings, not the bind groups
 const DENSITIES_BINDING: u32 = 0;
+const EMITTERS_BINDING: u32 = 0;
 
 const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
 const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0];
+const BASE_EMITTERS: &'static [u32] = &[0,2,3];
 /*const BASE_POSITIONS: &'static [[f32; 3]] = &[
     [1.0, 1.0, 2.0],
     [2.0, 2.0, 3.0],
@@ -66,6 +68,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let masses = BASE_MASSES;
     let positions = BASE_POSITIONS;
     let densities = BASE_DENSITIES;
+    let emitters = BASE_EMITTERS;
 
     /*setup:
     	* buffers for I/O that the shader will r/w
@@ -84,6 +87,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
        label: Some("densities_buffer"),
        contents: bytemuck::cast_slice(densities),
        usage: BufferUsages::STORAGE, 
+    });
+    let emitters_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("emitters_buffer"),
+        contents: bytemuck::cast_slice(emitters),
+        usage: BufferUsages::STORAGE,
     });
     let pos_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("pos_buffer_a"),
@@ -146,6 +154,19 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             },
             count: None,
         }],
+    });
+    let emitters_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+       label: Some("emitters_bind_group_layout"),
+       entries: &[BindGroupLayoutEntry {
+           binding: EMITTERS_BINDING,
+           visibility: ShaderStages::FRAGMENT,
+           ty: BindingType::Buffer {
+               ty: BufferBindingType::Storage {read_only: true},
+               has_dynamic_offset: false,
+               min_binding_size: None
+           },
+           count: None
+       }], 
     });
     
     let kinematics_bind_group_layout =
@@ -222,6 +243,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entries: &[BindGroupEntry {
             binding: DENSITIES_BINDING,
             resource: densities_buffer.as_entire_binding(),
+        }],
+    });
+    let emitters_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("emitters_bind_group"),
+        layout: &emitters_bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: EMITTERS_BINDING,
+            resource: emitters_buffer.as_entire_binding(),
         }],
     });
     let mut kinematics_bind_group_a = device.create_bind_group(&BindGroupDescriptor {
@@ -315,6 +344,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             &kinematics_bind_group_layout,
             &camera_bind_group_layout,
             &densities_bind_group_layout,
+            //&emitters_bind_group_layout,
         ],
         push_constant_ranges: &[],
     });
@@ -480,6 +510,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     trace_pass.set_bind_group(1, &kinematics_bind_group_b, &[]);
                     trace_pass.set_bind_group(2, &camera_bind_group, &[]);
                     trace_pass.set_bind_group(3, &densities_bind_group, &[]);
+                    //trace_pass.set_bind_group(4, &emitters_bind_group, &[]);
                     trace_pass.draw(0..3, 0..1);
                 }
 
