@@ -21,8 +21,10 @@ const MASS_BINDING: u32 = 0;
 const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 const ACC_BINDING: u32 = 2; //bindings, not the bind groups
+const DENSITIES_BINDING: u32 = 0;
 
 const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
+const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0];
 /*const BASE_POSITIONS: &'static [[f32; 3]] = &[
     [1.0, 1.0, 2.0],
     [2.0, 2.0, 3.0],
@@ -63,6 +65,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     //TODO: read input data / gen random
     let masses = BASE_MASSES;
     let positions = BASE_POSITIONS;
+    let densities = BASE_DENSITIES;
 
     /*setup:
     	* buffers for I/O that the shader will r/w
@@ -76,6 +79,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         label: Some("mass_buffer"),
         contents: bytemuck::cast_slice(masses),
         usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
+    });
+    let densities_buffer = device.create_buffer_init(&BufferInitDescriptor {
+       label: Some("densities_buffer"),
+       contents: bytemuck::cast_slice(densities),
+       usage: BufferUsages::STORAGE, 
     });
     let pos_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("pos_buffer_a"),
@@ -125,6 +133,21 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             count: None, //other values only for Texture, not Storage
         }],
     });
+    
+    let densities_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("densities_bind_group_layout"),
+        entries: &[BindGroupLayoutEntry {
+            binding: DENSITIES_BINDING,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage {read_only: true},
+                has_dynamic_offset: false,
+                min_binding_size: None
+            },
+            count: None,
+        }],
+    });
+    
     let kinematics_bind_group_layout =
         device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("kinematics_bind_group_layout"),
@@ -190,6 +213,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 size: None,
             }),*/
             resource: mass_buffer.as_entire_binding(),
+        }],
+    });
+    
+    let densities_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("densities_bind_group"),
+        layout: &densities_bind_group_layout,
+        entries: &[BindGroupEntry {
+            binding: DENSITIES_BINDING,
+            resource: densities_buffer.as_entire_binding(),
         }],
     });
     let mut kinematics_bind_group_a = device.create_bind_group(&BindGroupDescriptor {
@@ -282,6 +314,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             &mass_bind_group_layout,
             &kinematics_bind_group_layout,
             &camera_bind_group_layout,
+            &densities_bind_group_layout,
         ],
         push_constant_ranges: &[],
     });
@@ -446,6 +479,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     trace_pass.set_bind_group(0, &mass_bind_group, &[]);
                     trace_pass.set_bind_group(1, &kinematics_bind_group_b, &[]);
                     trace_pass.set_bind_group(2, &camera_bind_group, &[]);
+                    trace_pass.set_bind_group(3, &densities_bind_group, &[]);
                     trace_pass.draw(0..3, 0..1);
                 }
 
