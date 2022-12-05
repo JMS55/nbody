@@ -21,10 +21,10 @@ struct Camera {
 };
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
+@group(0) @binding(1) var<storage, read> emitters: array<u32>;
 @group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>;
 @group(2) @binding(0) var<uniform> camera: Camera;
 @group(3) @binding(0) var<storage, read> densities: array<f32>;
-//@group(4) @binding(0) var<storage, read> emitters: array<u32>;
 
 // formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
 //     formula for sphere: (position_on_surface-center_of_sphere)**2 = radius ** 2
@@ -177,9 +177,9 @@ fn trace(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     var second_diffuse_color: vec4<f32> = vec4<f32>(0.0,0.0,0.0,1.0);
     if brute_force_diffuse {
         if first_intersect.distance >= 0.0 {
-            for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
-            //for (var i2: u32 = 0u; i2 < arrayLength(&emitters); i2++) {
-            //    let i: u32 = emitters[i2];
+            //for (var i: u32 = 0u; i < arrayLength(&positions); i++) {
+            for (var i2: u32 = 0u; i2 < arrayLength(&emitters); i2++) {
+                let i: u32 = emitters[i2];
                 let diffuse_direction: vec3<f32> = positions[i]-first_intersect.intersect_point;
                 if dot(diffuse_direction,first_intersect.normal) < 0.0 {
                     continue;
