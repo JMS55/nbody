@@ -396,6 +396,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 ..
             } => {
                 let key_val = event_input;
+                let camera_direction: Vec3 = Vec3{x: f32::sin(camera.angle_elevation.x)*f32::cos(camera.angle_elevation.y), y: f32::sin(camera.angle_elevation.y), z: f32::cos(camera.angle_elevation.x)*f32::cos(camera.angle_elevation.y)};
+                let camera_plane_x: Vec3 = Vec3{ x: f32::cos(camera.angle_elevation.x), y: 0.0, z: f32::sin(camera.angle_elevation.x)};
+                let camera_plane_y: Vec3 = camera_plane_x.cross(camera_direction);
                 match key_val {
                     Option::None => {}
                     Option::Some(vkc) => {
@@ -408,17 +411,17 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         } else if vkc == VirtualKeyCode::Down {
                             camera.angle_elevation.y -= 0.1;
                         } else if vkc == VirtualKeyCode::A {
-                            camera.position.x -= 1.0;
+                            camera.position = camera.position -(camera_plane_x);
                         } else if vkc == VirtualKeyCode::D {
-                            camera.position.x += 1.0;
+                            camera.position = camera.position + (camera_plane_x);
                         } else if vkc == VirtualKeyCode::Q {
-                            camera.position.y += 1.0;
+                            camera.position = camera.position - (camera_plane_y);
                         } else if vkc == VirtualKeyCode::E {
-                            camera.position.y -= 1.0;
+                            camera.position = camera.position + (camera_plane_y);
                         } else if vkc == VirtualKeyCode::S {
-                            camera.position.z -= 1.0;
+                            camera.position = camera.position - (camera_direction);
                         } else if vkc == VirtualKeyCode::W {
-                            camera.position.z += 1.0;
+                            camera.position = camera.position + (camera_direction);
                         }
                     }
                 }
