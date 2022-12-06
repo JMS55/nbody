@@ -24,22 +24,31 @@ let max_max_depth = 20; //now lower than it was before, as we seem to have sprea
 let max_depth = max_max_depth; //i think overrides are somehow a way to pass things in?
 
 var<private> acc: vec3<f32>;
-var<private> stack: arr<u32, max_depth*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
-var<private> stack2: arr<u32, (octree[0].max_depth+1)*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
+//var<private> stack: arr<u32, max_depth*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
+//var<private> stack2: arr<u32, (octree[0].max_depth+1)*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
 
 fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
+    let SOFTENING_SQRD: f32 = 1.0;
+
     var divisor: f32 = pow(distance(pos2, pos1), 2.0);
+    let SOFTENING_SQRD: f32 = 1.0;
     divisor += SOFTENING_SQRD;
     divisor = pow(divisor, 1.5);
     return divisor;
 }
 
 fn direct_acc_comp(i: u32, n: OctreeNode) -> vec3<f32> {
+    let G: f32 = 0.00066743; //can shift decimal as you see fit
+
     let pos1 = positions_in[i];
     let pos2 = n.center_of_mass;
     let dist_vec = pos2 - pos1;
     var divisor = acc_div(pos1, pos2);
-    var g = G * other_mass / divisor;
+    let G: f32 = .00066743; //can shift decimal as you see fit
+    let TIME_STEP: f32 = 0.1;
+    var pos: vec3<f32> = positions_in[i];
+    var vel: vec3<f32> = velocities_in[i];
+    var g = G * n.total_mass / divisor;
     var bias = acos(
         dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
     );
@@ -53,8 +62,9 @@ fn tree_force(i: u32, n: OctreeNode) -> void {
         acc += direct_acc_comp(i, n);
         return;
     } else {
-        let d = get_range(n);
+        let d = n.range;
         let r = distance(positions_in[i], n.center_of_mass);
+        var theta:f32 = 0.5;
         if (d / r) < theta {
             acc += direct_acc_comp(i, n);
             return;
@@ -62,7 +72,7 @@ fn tree_force(i: u32, n: OctreeNode) -> void {
             var i: u32 = 1u;
             loop{
                 if n.child_indices[i] != 0 {
-                    tree_force(i, octree[n.child_indices]);
+                    // tree_force(i, octree[n.child_indices]);
                 }
                 i += 1u;
                 if i > 8 {
@@ -76,7 +86,7 @@ fn tree_force(i: u32, n: OctreeNode) -> void {
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
-    let G: f32 = .00066743; //can shift decimal as you see fit
+    let G: f32 = 0.00066743; //can shift decimal as you see fit
     let TIME_STEP: f32 = 0.1;
     let SOFTENING_SQRD: f32 = 1.0;
     let i_id = global_invocation_id.x; //only using x coord for now
@@ -95,7 +105,8 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
     if i_id >= n_bodies { //one quick and dirty branch that will only fork in a single workgroup; shouldn't be too bad
         return;
 	}
-
+    var pos: vec3<f32> = positions_in[i_id];
+    var vel: vec3<f32> = velocities_in[i_id];
 	//now, every invocation processes exactly one node -- the one at the index equal to its invocation id
 	// process:
 	// 	* compute acceleration based on forces
