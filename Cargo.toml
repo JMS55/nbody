@@ -10,3 +10,4 @@ encase = { version = "0.4", features = ["glam"] }
 bytemuck = "1.12"
 pollster = "0.2"
 glam = "0.22"
+futures-intrusive = "0.5"

@@ -38,9 +38,11 @@ const BASE_EMITTERS: &'static [u32] = &[0, 2, 3];
     [0.2, 0.2, 0.2],
     [5.0, 1.0, 2.0]
 ];*/
-//WGSL vec3 type is aligned to 16 bytes, so need to pad out the values for actual correctness!!
-const BASE_POSITIONS: &'static [f32; 16] = &[
-    1.0, 1.0, 2.0, 0.0, 3.0, 4.0, 5.0, 0.0, 3.0, 8.0, 4.0, 0.0, 8.0, 7.0, 8.5, 0.0,
+const BASE_POSITIONS: &'static [Vec3; 4] = &[
+    Vec3::new(1.0, 1.0, 2.0),
+    Vec3::new(3.0, 4.0, 5.0),
+    Vec3::new(3.0, 8.0, 4.0),
+    Vec3::new(8.0, 7.0, 8.5),
 ];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
@@ -71,7 +73,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     //TODO: read input data / gen random
     let masses = BASE_MASSES;
-    let positions = BASE_POSITIONS;
+    let mut positions = BASE_POSITIONS.to_vec();
     let densities = BASE_DENSITIES;
     let emitters = BASE_EMITTERS;
 
@@ -98,15 +100,18 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         contents: bytemuck::cast_slice(emitters),
         usage: BufferUsages::STORAGE,
     });
-    let pos_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
+    let mut pos_buffer_a = StorageBuffer::new(Vec::new());
+    pos_buffer_a.write(&positions).unwrap();
+    let pos_buffer_a = pos_buffer_a.into_inner();
+    let mut pos_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("pos_buffer_a"),
-        contents: bytemuck::cast_slice(positions),
-        usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
+        contents: &pos_buffer_a,
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, //inherently mapped at creation, as it creates and copies the data in one fn call
     });
-    let pos_buffer_b = device.create_buffer(&BufferDescriptor {
+    let mut pos_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("pos_buffer_b"),
         size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
-        usage: BufferUsages::STORAGE,
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         mapped_at_creation: false,
     });
     let vel_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
@@ -129,6 +134,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         label: Some("acc_buffer_b"),
         size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
         usage: BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    });
+    let pos_readback_buffer = device.create_buffer(&BufferDescriptor {
+        label: Some("pos_readback_buffer"),
+        size: (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
+        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
 
@@ -456,13 +467,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::MainEventsCleared => {
                 //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
 
-                let octree = OctreeNode::new_tree(&[], masses); // TODO: Read back the last positions from the GPU
+                let octree = OctreeNode::new_tree(&[], masses);
                 let mut octree_buffer = StorageBuffer::new(Vec::new());
                 octree_buffer.write(&octree).unwrap();
                 let octree_buffer = octree_buffer.into_inner();
                 let octree_buffer = device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("octree_buffer"),
-                    contents: bytemuck::cast_slice(&octree_buffer),
+                    contents: &octree_buffer,
                     usage: BufferUsages::STORAGE,
                 });
                 let octree_bind_group = device.create_bind_group(&BindGroupDescriptor {
@@ -507,11 +518,32 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     //at minimum: spread across x,y,z to support more than like, 2^22 bodies
                     nbody_step_pass.dispatch_workgroups(n_workgroups, 1, 1);
                 }
+
+                nbody_step_cmd_encoder.copy_buffer_to_buffer(
+                    &pos_buffer_b,
+                    0,
+                    &pos_readback_buffer,
+                    0,
+                    (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
+                );
+
                 //submit command encoder to queue
                 let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
 
+                let pos_slice = pos_readback_buffer.slice(..);
+                let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+                pos_slice.map_async(MapMode::Read, move |v| sender.send(v).unwrap());
+                device.poll(Maintain::Wait);
+                pollster::block_on(receiver.receive());
+                let data = pos_slice.get_mapped_range();
+                let buf = StorageBuffer::new(&*data);
+                buf.read(&mut positions).unwrap();
+                drop(data);
+                pos_readback_buffer.unmap();
+
                 //swap groups a and b to alternate I/O
                 mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
+                mem::swap(&mut pos_buffer_a, &mut pos_buffer_b);
 
                 window.request_redraw();
             }
@@ -533,7 +565,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 let camera_buffer = camera_buffer.into_inner();
                 let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("camera_buffer"),
-                    contents: bytemuck::cast_slice(&camera_buffer),
+                    contents: &camera_buffer,
                     usage: BufferUsages::UNIFORM,
                 });
                 let camera_bind_group = device.create_bind_group(&BindGroupDescriptor {
