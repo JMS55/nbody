@@ -3,6 +3,7 @@ mod octree;
 use crate::octree::OctreeNode;
 use encase::{ShaderType, StorageBuffer, UniformBuffer};
 use glam::{Vec2, Vec3};
+use rand::Rng;
 use std::borrow::Cow;
 use std::mem;
 use std::time::{Duration, Instant};
@@ -14,7 +15,8 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 4;
+const N_BODIES: usize = 1000;
+pub const WORLD_SIZE: f32 = 65536.0;
 //const N_WORKGROUPS: u32 = 1;
 const WG_SIZE: u32 = 64;
 
@@ -71,11 +73,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     };
     surface.configure(&device, &config);
 
-    //TODO: read input data / gen random
-    let masses = BASE_MASSES;
-    let mut positions = BASE_POSITIONS.to_vec();
-    let densities = BASE_DENSITIES;
+    let mut masses = Vec::with_capacity(N_BODIES);
+    let mut positions = Vec::with_capacity(N_BODIES);
+    let mut densities = Vec::with_capacity(N_BODIES);
     let emitters = BASE_EMITTERS;
+    let mut rng = rand::thread_rng();
+    for _ in 0..N_BODIES {
+        let mass = rng.gen_range(0.5..=500.0);
+        let lower_bound = WORLD_SIZE / 3.0;
+        let upper_bound = 2.0 * lower_bound;
+        let position = Vec3::new(
+            rng.gen_range(lower_bound..=upper_bound),
+            rng.gen_range(lower_bound..=upper_bound),
+            rng.gen_range(lower_bound..=upper_bound),
+        );
+        let density = rng.gen_range(1.0..=6.0);
+        masses.push(mass);
+        positions.push(position);
+        densities.push(density);
+    }
 
     /*setup:
     	* buffers for I/O that the shader will r/w
@@ -87,12 +103,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mass_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("mass_buffer"),
-        contents: bytemuck::cast_slice(masses),
+        contents: bytemuck::cast_slice(&masses),
         usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
     });
     let densities_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("densities_buffer"),
-        contents: bytemuck::cast_slice(densities),
+        contents: bytemuck::cast_slice(&densities),
         usage: BufferUsages::STORAGE,
     });
     let emitters_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -467,7 +483,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::MainEventsCleared => {
                 //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
 
-                let octree = OctreeNode::new_tree(&positions, masses);
+                let octree = OctreeNode::new_tree(&positions, &masses);
                 let mut octree_buffer = StorageBuffer::new(Vec::new());
                 octree_buffer.write(&octree).unwrap();
                 let octree_buffer = octree_buffer.into_inner();
@@ -550,9 +566,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
             // Render (trace.wgsl)
             Event::RedrawRequested(_) => {
-                static mut running_average_time_render: Duration = Duration::new(0, 0);
-                static mut number_frames_rendered: u32 = 0;
-                let start_time: Instant = Instant::now();
+                // static mut running_average_time_render: Duration = Duration::new(0, 0);
+                // static mut number_frames_rendered: u32 = 0;
+                // let start_time: Instant = Instant::now();
                 let frame = surface.get_current_texture().unwrap();
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
                 let mut trace_cmd_encoder =
@@ -597,19 +613,19 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                 queue.submit(Some(trace_cmd_encoder.finish()));
                 frame.present();
-                let new_time: Instant = Instant::now();
-                println!(
-                    "Current Frame Time: {:?}",
-                    new_time.duration_since(start_time)
-                );
-                unsafe {
-                    running_average_time_render = (running_average_time_render
-                        * number_frames_rendered
-                        + new_time.duration_since(start_time))
-                        / (number_frames_rendered + 1);
-                    number_frames_rendered += 1;
-                    println!("Average Frame Time: {:?}", running_average_time_render);
-                }
+                // let new_time: Instant = Instant::now();
+                // println!(
+                //     "Current Frame Time: {:?}",
+                //     new_time.duration_since(start_time)
+                // );
+                // unsafe {
+                //     running_average_time_render = (running_average_time_render
+                //         * number_frames_rendered
+                //         + new_time.duration_since(start_time))
+                //         / (number_frames_rendered + 1);
+                //     number_frames_rendered += 1;
+                //     println!("Average Frame Time: {:?}", running_average_time_render);
+                // }
             }
 
             Event::WindowEvent {

@@ -1,7 +1,6 @@
+use crate::WORLD_SIZE;
 use encase::ShaderType;
 use glam::Vec3;
-
-const WORLD_SIZE: f32 = 65536.0;
 
 #[derive(ShaderType)]
 pub struct OctreeNode {
