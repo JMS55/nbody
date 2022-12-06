@@ -1,11 +1,12 @@
 struct OctreeNode {
 	center_of_mass: vec3<f32>,
     pos_min: vec3<f32>,
-    pos_max: vec3<f32>
+    pos_max: vec3<f32>,
     range: f32,
 	total_mass: f32,
 	child_indices: array<u32, 8>,
 	is_leaf: u32,
+    max_depth: u32,
 };
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
@@ -19,15 +20,12 @@ struct OctreeNode {
 @group(3) @binding(0) var<storage, read> octree: array<OctreeNode>;
 
 var theta:f32 = 0.5;
-const max_max_depth = 20;
-override max_depth = max_max_depth; //i think overrides are somehow a way to pass things in?
+let max_max_depth = 20; //now lower than it was before, as we seem to have spread out our bodies somewhat? but fuck it, 20 to be safe
+let max_depth = max_max_depth; //i think overrides are somehow a way to pass things in?
 
 var<private> acc: vec3<f32>;
-var<private> stack: arr<u32, max_depth>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
-
-// array<i32,8>, array<i32,8u>, and array<i32,width> are the same type.
-// Their element counts evaluate to 8.
-var<private> d: array<i32,width>;
+var<private> stack: arr<u32, max_depth*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
+var<private> stack2: arr<u32, (octree[0].max_depth+1)*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
 
 fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
     var divisor: f32 = pow(distance(pos2, pos1), 2.0);
