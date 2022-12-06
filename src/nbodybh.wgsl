@@ -18,9 +18,16 @@ struct OctreeNode {
 @group(2) @binding(2) var<storage, read_write> accelerations_out: array<vec3<f32>>;
 @group(3) @binding(0) var<storage, read> octree: array<OctreeNode>;
 
-var<private> acc: vec3<f32>;
-
 var theta:f32 = 0.5;
+const max_max_depth = 20;
+override max_depth = max_max_depth; //i think overrides are somehow a way to pass things in?
+
+var<private> acc: vec3<f32>;
+var<private> stack: arr<u32, max_depth>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
+
+// array<i32,8>, array<i32,8u>, and array<i32,width> are the same type.
+// Their element counts evaluate to 8.
+var<private> d: array<i32,width>;
 
 fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
     var divisor: f32 = pow(distance(pos2, pos1), 2.0);
