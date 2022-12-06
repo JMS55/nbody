@@ -3,7 +3,7 @@ mod octree;
 use crate::octree::OctreeNode;
 use encase::{ShaderType, StorageBuffer, UniformBuffer};
 use glam::{Vec2, Vec3};
-use rand::Rng;
+// use rand::Rng;
 use std::borrow::Cow;
 use std::mem;
 // use std::time::{Duration, Instant};
@@ -15,7 +15,7 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 10;
+const N_BODIES: usize = 4;
 pub const WORLD_SIZE: f32 = 65536.0;
 //const N_WORKGROUPS: u32 = 1;
 const WG_SIZE: u32 = 64;
@@ -31,15 +31,15 @@ const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 const ACC_BINDING: u32 = 2; //bindings, not the bind groups
 
-// const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
-// const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0];
+const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
+const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0];
 const BASE_EMITTERS: &'static [u32] = &[0, 2, 3];
-// const BASE_POSITIONS: &'static [Vec3; 4] = &[
-//     Vec3::new(1.0, 1.0, 2.0),
-//     Vec3::new(3.0, 4.0, 5.0),
-//     Vec3::new(3.0, 8.0, 4.0),
-//     Vec3::new(8.0, 7.0, 8.5),
-// ];
+const BASE_POSITIONS: &'static [Vec3; 4] = &[
+    Vec3::new(1.0, 1.0, 2.0),
+    Vec3::new(3.0, 4.0, 5.0),
+    Vec3::new(3.0, 8.0, 4.0),
+    Vec3::new(8.0, 7.0, 8.5),
+];
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     // Setup gpu
@@ -67,25 +67,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     };
     surface.configure(&device, &config);
 
-    let mut masses = Vec::with_capacity(N_BODIES);
-    let mut positions = Vec::with_capacity(N_BODIES);
-    let mut densities = Vec::with_capacity(N_BODIES);
+    let mut masses = BASE_MASSES.to_vec();
+    let mut positions = BASE_POSITIONS.to_vec();
+    let mut densities = BASE_DENSITIES.to_vec();
     let emitters = BASE_EMITTERS;
-    let mut rng = rand::thread_rng();
-    for _ in 0..N_BODIES {
-        let mass = rng.gen_range(0.5..=500.0);
-        let lower_bound = WORLD_SIZE / 3.0;
-        let upper_bound = 2.0 * lower_bound;
-        let position = Vec3::new(
-            rng.gen_range(lower_bound..=upper_bound),
-            rng.gen_range(lower_bound..=upper_bound),
-            rng.gen_range(lower_bound..=upper_bound),
-        );
-        let density = rng.gen_range(1.0..=6.0);
-        masses.push(mass);
-        positions.push(position);
-        densities.push(density);
-    }
+    // let mut rng = rand::thread_rng();
+    // for _ in 0..N_BODIES {
+    //     let mass = rng.gen_range(0.5..=500.0);
+    //     let lower_bound = WORLD_SIZE / 3.0;
+    //     let upper_bound = 2.0 * lower_bound;
+    //     let position = Vec3::new(
+    //         rng.gen_range(lower_bound..=upper_bound),
+    //         rng.gen_range(lower_bound..=upper_bound),
+    //         rng.gen_range(lower_bound..=upper_bound),
+    //     );
+    //     let density = rng.gen_range(1.0..=6.0);
+    //     masses.push(mass);
+    //     positions.push(position);
+    //     densities.push(density);
+    // }
 
     /*setup:
     	* buffers for I/O that the shader will r/w
