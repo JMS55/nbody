@@ -21,10 +21,10 @@ struct Camera {
 };
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
-@group(0) @binding(1) var<storage, read> emitters: array<u32>;
+@group(0) @binding(1) var<storage, read> densities: array<f32>;
+@group(0) @binding(2) var<storage, read> emitters: array<u32>;
 @group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>;
 @group(2) @binding(0) var<uniform> camera: Camera;
-@group(3) @binding(0) var<storage, read> densities: array<f32>;
 
 // formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
 //     formula for sphere: (position_on_surface-center_of_sphere)**2 = radius ** 2

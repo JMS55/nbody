@@ -1,3 +1,10 @@
+struct OctreeNode {
+	center_of_mass: vec3<f32>,
+	total_mass: f32,
+	child_indices: array<u32, 8>,
+	is_leaf: u32,
+};
+
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 //TODO: figure out if these access methods can be specified better
 @group(1) @binding(0) var<storage, read_write> positions_in: array<vec3<f32>>;
@@ -6,6 +13,7 @@
 @group(2) @binding(0) var<storage, read_write> positions_out: array<vec3<f32>>;
 @group(2) @binding(1) var<storage, read_write> velocities_out: array<vec3<f32>>;
 @group(2) @binding(2) var<storage, read_write> accelerations_out: array<vec3<f32>>;
+@group(3) @binding(0) var<storage, read> octree: array<OctreeNode>;
 
 @compute
 @workgroup_size(64)
