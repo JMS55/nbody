@@ -34,6 +34,7 @@ impl OctreeNode {
             ));
         }
         nodes[0].max_depth = max_depth;
+		dbg!(max_depth); //multiply by 8, that's the max traversal
         nodes
     }
 
