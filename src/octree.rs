@@ -35,7 +35,7 @@ impl OctreeNode {
         nodes
     }
 	
-	fn range(&mut self) -> f32 {
+	pub fn range(&mut self) -> f32 {
 	    return (self.pos_max - self.pos_min).reduce_partial_max(); // why doesn't it work? https://docs.rs/vek/0.14.1/vek/vec/repr_c/vec3/struct.Vec3.html#method.partial_max
 	}
 
