@@ -64,21 +64,13 @@ impl OctreeNode {
         let nodes = unsafe { &mut *nodes_ptr };
 
         let ci_b = node_index_for_child(self_center, node_b_position);
-        if self.child_indices[ci_b] == 0 {
-            let i = nodes.len();
-            nodes.push(Self::new_dummy());
-            self.child_indices[ci_b] = i as u32;
-        }
+        self.ensure_has_child(ci_b, nodes);
 
         if self.is_leaf == 1 {
             self.is_leaf = 0;
 
             let ci_a = node_index_for_child(self_center, node_a_position);
-            if self.child_indices[ci_a] == 0 {
-                let i = nodes.len();
-                nodes.push(Self::new_dummy());
-                self.child_indices[ci_a] = i as u32;
-            }
+            self.ensure_has_child(ci_a, nodes);
 
             nodes[self.child_indices[ci_a] as usize].insert(
                 node_a_position,
@@ -96,6 +88,14 @@ impl OctreeNode {
             self_extents,
             nodes_ptr,
         );
+    }
+
+    fn ensure_has_child(&mut self, ci: usize, nodes: &mut Vec<Self>) {
+        if self.child_indices[ci] == 0 {
+            let i = nodes.len();
+            nodes.push(Self::new_dummy());
+            self.child_indices[ci] = i as u32;
+        }
     }
 
     fn new_dummy() -> Self {
