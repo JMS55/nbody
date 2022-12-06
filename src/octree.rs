@@ -123,13 +123,13 @@ impl OctreeNode {
 fn node_index_for_child(node_center: Vec3, child_position: Vec3) -> usize {
     let mut i = 0b000;
     if child_position.x >= node_center.x {
-        i &= 0b100;
+        i |= 0b100;
     }
     if child_position.y >= node_center.y {
-        i &= 0b010;
+        i |= 0b010;
     }
     if child_position.z >= node_center.z {
-        i &= 0b001;
+        i |= 0b001;
     }
     i
 }

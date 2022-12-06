@@ -467,7 +467,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::MainEventsCleared => {
                 //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
 
-                let octree = OctreeNode::new_tree(&[], masses);
+                let octree = OctreeNode::new_tree(&positions, masses);
                 let mut octree_buffer = StorageBuffer::new(Vec::new());
                 octree_buffer.write(&octree).unwrap();
                 let octree_buffer = octree_buffer.into_inner();
