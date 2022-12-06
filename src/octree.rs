@@ -56,8 +56,8 @@ impl OctreeNode {
         self.total_mass = node_a_mass + node_b_mass;
         self.center_of_mass =
             ((node_a_position * node_a_mass) + (node_b_position * node_b_mass)) / self.total_mass;
-        self.pos_min = Vec3::min(self.pos_min, position);
-        self.pos_max = Vec3::max(self.pos_max, position);
+        self.pos_min = self.pos_min.min(position);
+        self.pos_max = self.pos_max.max(position);
         self.range = (self.pos_max - self.pos_min).max_element();
 
         let self_extents = self_extents / 2.0;
@@ -126,8 +126,9 @@ fn node_index_for_child(node_center: Vec3, child_position: Vec3) -> usize {
 }
 
 fn extent_weights(ci: usize) -> Vec3 {
-    let x = -1.0 + (2.0 * (((ci & 0b100) >> 2) as f32));
-    let y = -1.0 + (2.0 * (((ci & 0b010) >> 1) as f32));
-    let z = -1.0 + (2.0 * ((ci & 0b001) as f32));
-    Vec3 { x, y, z }
+    Vec3 {
+        x: -1.0 + (2.0 * (((ci & 0b100) >> 2) as f32)),
+        y: -1.0 + (2.0 * (((ci & 0b010) >> 1) as f32)),
+        z: -1.0 + (2.0 * ((ci & 0b001) as f32)),
+    }
 }
