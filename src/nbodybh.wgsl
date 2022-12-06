@@ -1,11 +1,12 @@
 struct OctreeNode {
 	center_of_mass: vec3<f32>,
     pos_min: vec3<f32>,
-    pos_max: vec3<f32>
+    pos_max: vec3<f32>,
     range: f32,
 	total_mass: f32,
 	child_indices: array<u32, 8>,
 	is_leaf: u32,
+    max_depth: u32,
 };
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
@@ -30,6 +31,8 @@ var<private> stack: arr<u32, max_depth>; //the docs say you aren't allowed to do
 var<private> d: array<i32,width>;
 
 fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
+    let SOFTENING_SQRD: f32 = 1.0;
+
     var divisor: f32 = pow(distance(pos2, pos1), 2.0);
     divisor += SOFTENING_SQRD;
     divisor = pow(divisor, 1.5);
@@ -37,11 +40,13 @@ fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
 }
 
 fn direct_acc_comp(i: u32, n: OctreeNode) -> vec3<f32> {
+    let G: f32 = 0.00066743; //can shift decimal as you see fit
+
     let pos1 = positions_in[i];
     let pos2 = n.center_of_mass;
     let dist_vec = pos2 - pos1;
     var divisor = acc_div(pos1, pos2);
-    var g = G * other_mass / divisor;
+    var g = G * other_mass / divisor; // TODO: Where is other_mass coming from?
     var bias = acos(
         dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
     );
@@ -78,7 +83,7 @@ fn tree_force(i: u32, n: OctreeNode) -> void {
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
-    let G: f32 = .00066743; //can shift decimal as you see fit
+    let G: f32 = 0.00066743; //can shift decimal as you see fit
     let TIME_STEP: f32 = 0.1;
     let SOFTENING_SQRD: f32 = 1.0;
     let i_id = global_invocation_id.x; //only using x coord for now
