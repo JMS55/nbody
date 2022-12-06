@@ -348,7 +348,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     //this shader must be compiled to a pipeline, and the handle thereof retrieved
     let nbody_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("nbody_shader"),
-        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("nbodybh.wgsl"))),
+        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("nbody.wgsl"))),
     });
     //pipeline layout, then pipeline the compute shader
     let nbody_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
