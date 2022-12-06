@@ -19,70 +19,6 @@ struct OctreeNode {
 @group(2) @binding(2) var<storage, read_write> accelerations_out: array<vec3<f32>>;
 @group(3) @binding(0) var<storage, read> octree: array<OctreeNode>;
 
-var theta:f32 = 0.5;
-let max_max_depth = 20; //now lower than it was before, as we seem to have spread out our bodies somewhat? but fuck it, 20 to be safe
-let max_depth = max_max_depth; //i think overrides are somehow a way to pass things in?
-
-var<private> acc: vec3<f32>;
-//var<private> stack: arr<u32, max_depth*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
-//var<private> stack2: arr<u32, (octree[0].max_depth+1)*8>; //the docs say you aren't allowed to do this (use size from an override) for private variables (says only for wg-shared), but it seems to compile...
-
-fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
-    let SOFTENING_SQRD: f32 = 1.0;
-
-    var divisor: f32 = pow(distance(pos2, pos1), 2.0);
-    let SOFTENING_SQRD: f32 = 1.0;
-    divisor += SOFTENING_SQRD;
-    divisor = pow(divisor, 1.5);
-    return divisor;
-}
-
-fn direct_acc_comp(i: u32, n: OctreeNode) -> vec3<f32> {
-    let G: f32 = 0.00066743; //can shift decimal as you see fit
-
-    let pos1 = positions_in[i];
-    let pos2 = n.center_of_mass;
-    let dist_vec = pos2 - pos1;
-    var divisor = acc_div(pos1, pos2);
-    let G: f32 = .00066743; //can shift decimal as you see fit
-    let TIME_STEP: f32 = 0.1;
-    var pos: vec3<f32> = positions_in[i];
-    var vel: vec3<f32> = velocities_in[i];
-    var g = G * n.total_mass / divisor;
-    var bias = acos(
-        dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
-    );
-    bias = pow(bias, .1);
-    g *= bias;
-    return g * dist_vec;
-}
-
-fn tree_force(i: u32, n: OctreeNode) -> void {
-    if n.is_leaf == 1 {
-        acc += direct_acc_comp(i, n);
-        return;
-    } else {
-        let d = n.range;
-        let r = distance(positions_in[i], n.center_of_mass);
-        var theta:f32 = 0.5;
-        if (d / r) < theta {
-            acc += direct_acc_comp(i, n);
-            return;
-        } else {
-            var i: u32 = 1u;
-            loop{
-                if n.child_indices[i] != 0 {
-                    // tree_force(i, octree[n.child_indices]);
-                }
-                i += 1u;
-                if i > 8 {
-                    break;
-                }
-            }
-        }
-    }
-}
-
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
@@ -107,6 +43,7 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 	}
     var pos: vec3<f32> = positions_in[i_id];
     var vel: vec3<f32> = velocities_in[i_id];
+	var acc: vec3<f32> = vec3(0.0, 0.0, 0.0);
 	//now, every invocation processes exactly one node -- the one at the index equal to its invocation id
 	// process:
 	// 	* compute acceleration based on forces
@@ -115,15 +52,101 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 	// 	* assume no collisions ever occur, whatever
 
     let time_step = TIME_STEP;
+	let theta = 0.5;
+
+	var stack:array<u32, 800>;
+	var top:i32 = 0;
+
+	stack[top] = 0u;
+
+	loop {
+		if top<0 {
+			break;
+		}
+
+		var node:OctreeNode = octree[stack[top]];
+		top = top - 1;
+		if (node.is_leaf == 1u) {
+			let other_mass: f32 = node.total_mass;
+			let other_pos: vec3<f32> = node.center_of_mass;
+			let dist_vec = other_pos - pos;
+
+				//divisor = distance^2 + softening^2
+			var divisor: f32 = pow(distance(other_pos, pos), 2.0);
+			divisor += SOFTENING_SQRD;
+				//take to 3/2 power for a third power of norm of distance, to normalize dist_vec
+			divisor = pow(divisor, 1.5);
+
+				//acc += G*other_mass*dist_vec/divisor;
+			var g = G * other_mass / divisor;
+
+				//bias to account more for slowdowns than progressive speedups
+					//this is important while we aren't doing dynamic timestep
+						//because an imbalance of steps due to higher velocity on inbound than outbound of proximity
+							//results in a slingshot effect not seen in real physics
+					//acos(a dot b)/(magA * magB)
+					//mag(a) = 2-norm(a) = distance(0vec, a)
+				//start with the angle between the accelerator and the current velocity
+			var bias = acos(
+				dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
+			);
+				//pow to rein in the extremes
+			bias = pow(bias, .15);
+			g *= bias;
+
+			acc += g * dist_vec;			
+		} else {
+			let d = node.range;
+			let r = distance(pos, node.center_of_mass);
+			if ((d/r) < theta) {
+				let other_mass: f32 = node.total_mass;
+				let other_pos: vec3<f32> = node.center_of_mass;
+				let dist_vec = other_pos - pos;
+
+					//divisor = distance^2 + softening^2
+				var divisor: f32 = pow(distance(other_pos, pos), 2.0);
+				divisor += SOFTENING_SQRD;
+					//take to 3/2 power for a third power of norm of distance, to normalize dist_vec
+				divisor = pow(divisor, 1.5);
+
+					//acc += G*other_mass*dist_vec/divisor;
+				var g = G * other_mass / divisor;
+
+					//bias to account more for slowdowns than progressive speedups
+						//this is important while we aren't doing dynamic timestep
+							//because an imbalance of steps due to higher velocity on inbound than outbound of proximity
+								//results in a slingshot effect not seen in real physics
+						//acos(a dot b)/(magA * magB)
+						//mag(a) = 2-norm(a) = distance(0vec, a)
+					//start with the angle between the accelerator and the current velocity
+				var bias = acos(
+					dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
+				);
+					//pow to rein in the extremes
+				bias = pow(bias, .15);
+				g *= bias;
+
+				acc += g * dist_vec;				
+			} else {
+				var i:u32 = 0u;
+				loop{
+					if (node.child_indices[i] != 0u) {
+						stack[top] = node.child_indices[i];
+						top = top + 1;
+					}
+					i += 1u;
+					if (i >= 8u) {
+						break;
+					}
+				}
+			}
+		}
+	}
 
 	//get acceleration
 		//F = m*g = m * (GM / r^2) = m * G*M / distance(us,them)^2
 		//then ignore the m, kn-ow g = G*M / distance(us,them)^2
 		//then multiply that scalar acceleration by normalize(distance_vector(us,them)) to get accel vector
-
-    acc = vec3(0.0, 0.0, 0.0);
-
-    tree_force(i_id, octree[0]);
 
 	//update final position using: initial position, initial velocity, and acceleration
 
