@@ -5,6 +5,8 @@ use glam::Vec3;
 #[derive(ShaderType)]
 pub struct OctreeNode {
     center_of_mass: Vec3,
+    pos_min: Vec3,
+    pos_max: Vec3,
     total_mass: f32,
     child_indices: [u32; 8],
     is_leaf: u32,
@@ -14,6 +16,8 @@ impl OctreeNode {
     pub fn new_tree(positions: &[Vec3], masses: &[f32]) -> Vec<Self> {
         let root_node = Self {
             center_of_mass: Vec3::ZERO,
+            pos_min: Vec3::ZERO,
+            pos_max: Vec3::ZERO,
             total_mass: 0.0,
             child_indices: [0; 8],
             is_leaf: 0,
@@ -30,6 +34,10 @@ impl OctreeNode {
 
         nodes
     }
+	
+	fn range(&mut self) -> f32 {
+	    return (self.pos_max - self.pos_min).reduce_partial_max(); // why doesn't it work? https://docs.rs/vek/0.14.1/vek/vec/repr_c/vec3/struct.Vec3.html#method.partial_max
+	}
 
     fn insert(
         &mut self,
@@ -42,6 +50,8 @@ impl OctreeNode {
         if self.total_mass == 0.0 {
             self.total_mass = mass;
             self.center_of_mass = position;
+            self.pos_min = position;
+            self.pos_max = position;
             self.is_leaf = 1;
 
             return;
@@ -55,6 +65,8 @@ impl OctreeNode {
         self.total_mass = node_a_mass + node_b_mass;
         self.center_of_mass =
             ((node_a_position * node_a_mass) + (node_b_position * node_b_mass)) / self.total_mass;
+		self.pos_min = Vec3::min(self.pos_min, position);
+		self.pos_max = Vec3::max(self.pos_max, position);
 
         let self_extents = self_extents / 2.0;
         let nodes = unsafe { &mut *nodes_ptr };
@@ -64,6 +76,8 @@ impl OctreeNode {
             let i = nodes.len();
             nodes.push(Self {
                 center_of_mass: Vec3::ZERO,
+                pos_min: Vec3::ZERO,
+                pos_max: Vec3::ZERO,
                 total_mass: 0.0,
                 child_indices: [0; 8],
                 is_leaf: 0,
@@ -79,6 +93,8 @@ impl OctreeNode {
                 let i = nodes.len();
                 nodes.push(Self {
                     center_of_mass: Vec3::ZERO,
+                    pos_min: Vec3::ZERO,
+                    pos_max: Vec3::ZERO,
                     total_mass: 0.0,
                     child_indices: [0; 8],
                     is_leaf: 0,
