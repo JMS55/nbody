@@ -58,9 +58,10 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 	var top:i32 = 0;
 
 	stack[top] = 0u;
+    top = top + 1;
 
 	loop {
-		if top<0 {
+		if (top<=0) {
 			break;
 		}
 
@@ -143,25 +144,6 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 		}
 	}
 
-	//get acceleration
-		//F = m*g = m * (GM / r^2) = m * G*M / distance(us,them)^2
-		//then ignore the m, kn-ow g = G*M / distance(us,them)^2
-		//then multiply that scalar acceleration by normalize(distance_vector(us,them)) to get accel vector
-
-	//update final position using: initial position, initial velocity, and acceleration
-
-	//euclidean integration: pos_f = pos_i + vel_i*t + .5*a*t^2
-	//pos += velocities_in[i_id]*time_step + (0.5)*acc*pow(time_step,2.0);
-	//a little hack to make things less floaty: decay (kinda like a friction)
-	//vel *= 0.9996;
-	//vel += acc*time_step;
-	//another problem: this was using a_i+1 instead of a_i to determine p_i+1
-
-	//Leapfrog-Verlet Integration: second-order, so hopefully stabilizes oscillation
-		//acc_i+1 = A(pos_i), which we've just done
-		//pos_i+1 = pos_i + vel_i*t + .5*a_i*t^2
-		//vel_i+1 = v_i + 1/2(a_i + a_i+1)*t
-			//essentially a trapezoidal approximation rather than RRAM
     pos += vel * time_step + 0.5 * accelerations_in[i_id] * pow(time_step, 2.0);
     vel += 0.5 * (accelerations_in[i_id] + acc) * time_step;
 
