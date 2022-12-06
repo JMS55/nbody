@@ -1,10 +1,11 @@
 struct OctreeNode {
 	center_of_mass: vec3<f32>,
+    pos_min: vec3<f32>,
+    pos_max: vec3<f32>
+    range: f32,
 	total_mass: f32,
 	child_indices: array<u32, 8>,
 	is_leaf: u32,
-    pos_min: vec3<f32>,
-    pos_max: vec3<f32>
 };
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
@@ -21,23 +22,18 @@ var<private> acc: vec3<f32>;
 
 var theta:f32 = 0.5;
 
-fn get_range(n:OctreeNode) -> f32{
-    var range_vec:vec3<f32> = n.pos_max-n.pos_min;
-    return f32::max(range_vec[0],f32::max(range_vec[1], range_vec[2]));
-}
-
-fn acc_div(pos1:vec3<f32>, pos2:vec3<f32>) -> f32{
+fn acc_div(pos1: vec3<f32>, pos2: vec3<f32>) -> f32 {
     var divisor: f32 = pow(distance(pos2, pos1), 2.0);
     divisor += SOFTENING_SQRD;
     divisor = pow(divisor, 1.5);
     return divisor;
 }
 
-fn direct_acc_comp(i:u32, n:OctreeNode) -> vec3<f32>{
+fn direct_acc_comp(i: u32, n: OctreeNode) -> vec3<f32> {
     let pos1 = positions_in[i];
     let pos2 = n.center_of_mass;
     let dist_vec = pos2 - pos1;
-    var divisor = acc_div(pos1,pos2);
+    var divisor = acc_div(pos1, pos2);
     var g = G * other_mass / divisor;
     var bias = acos(
         dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
@@ -47,24 +43,24 @@ fn direct_acc_comp(i:u32, n:OctreeNode) -> vec3<f32>{
     return g * dist_vec;
 }
 
-fn tree_force(i:u32, n:OctreeNode) -> void{
-    if(n.is_leaf == 1){
-        acc += direct_acc_comp(i,n);
-        return;   
+fn tree_force(i: u32, n: OctreeNode) -> void {
+    if n.is_leaf == 1 {
+        acc += direct_acc_comp(i, n);
+        return;
     } else {
         let d = get_range(n);
         let r = distance(positions_in[i], n.center_of_mass);
-        if((d/r) < theta){
+        if (d / r) < theta {
             acc += direct_acc_comp(i, n);
             return;
         } else {
             var i: u32 = 1u;
             loop{
-                if(n.child_indices[i]!=0){
+                if n.child_indices[i] != 0 {
                     tree_force(i, octree[n.child_indices]);
                 }
-                i+=1u;
-                if(i>8){
+                i += 1u;
+                if i > 8 {
                     break;
                 }
             }
