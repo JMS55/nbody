@@ -402,6 +402,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 
     let mut camera = Camera::default();
+    let mut render_bool: bool = true;
     camera.position.z -= 10.0;
     event_loop.run(move |event, _, control_flow| {
         //let _ = (&instance, &adapter, &nbody_shader);
@@ -554,8 +555,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 //swap groups a and b to alternate I/O
                 mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
                 mem::swap(&mut pos_buffer_a, &mut pos_buffer_b);
+		if render_bool { 
+			render_bool = false; 
+			window.request_redraw(); 
+		} else{
+			render_bool = true;
+		}
 
-                window.request_redraw();
             }
 
             // Render (trace.wgsl)
