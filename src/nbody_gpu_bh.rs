@@ -75,7 +75,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             rng.gen_range(lower_bound..=upper_bound),
             rng.gen_range(lower_bound..=upper_bound),
         );
-        //let density = rng.gen_range(0.1..=1.0);
+        //let density = rng.gen_range(1.0..=2.5);
         let density = 1.0;
         masses.push(mass);
         positions_1.push(position);
