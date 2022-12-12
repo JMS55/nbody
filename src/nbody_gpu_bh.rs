@@ -6,8 +6,7 @@ use glam::{Vec2, Vec3};
 use rand::Rng;
 use std::borrow::Cow;
 use std::mem;
-// use std::time::{Duration, Instant};
-use wgpu::util::*; //include some stuff outside of spec
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
 use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -15,11 +14,10 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 100;
-pub const WORLD_SIZE: f32 = 100.0;
-//const N_WORKGROUPS: u32 = 1;
-const WG_SIZE: u32 = 64;
+const N_BODIES: usize = 100_000;
+pub const WORLD_SIZE: f32 = 1000.0;
 
+const WG_SIZE: usize = 64;
 const STATIC_GROUP: u32 = 0;
 const KINEMATICS_IN_GROUP: u32 = 1;
 const KINEMATICS_OUT_GROUP: u32 = 2;
@@ -31,18 +29,8 @@ const POS_BINDING: u32 = 0; //bindings, not the bind groups
 const VEL_BINDING: u32 = 1; //bindings, not the bind groups
 const ACC_BINDING: u32 = 2; //bindings, not the bind groups
 
-// const BASE_MASSES: &'static [f32] = &[0.2, 0.4, 16.0, 800.0];
-// const BASE_DENSITIES: &'static [f32] = &[1.0, 1.0, 2.0, 5.0]];
-const BASE_EMITTERS: &'static [u32] = &[0, 2, 3];
-// const BASE_POSITIONS: &'static [Vec3; 0] = &[
-//     //Vec3::new(1.0, 1.0, 2.0),
-//     //Vec3::new(3.0, 4.0, 5.0),
-//     //Vec3::new(3.0, 8.0, 4.0),
-//     //Vec3::new(8.0, 7.0, 8.5),
-// ];
-
 async fn run(event_loop: EventLoop<()>, window: Window) {
-    // Setup gpu
+    // Setup GPU adapter/surface
     let instance = Instance::new(Backends::all());
     let surface = unsafe { instance.create_surface(&window) };
     let adapter = instance
@@ -67,12 +55,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     };
     surface.configure(&device, &config);
 
+    // Setup CPU buffers
     let mut masses = Vec::with_capacity(N_BODIES);
-    let mut positions = Vec::with_capacity(N_BODIES);
     let mut densities = Vec::with_capacity(N_BODIES);
-    let emitters = BASE_EMITTERS;
+    let mut emitters = Vec::with_capacity(N_BODIES);
+
+    let mut positions_1 = Vec::with_capacity(N_BODIES);
+
+    // Generate random bodies
     let mut rng = rand::thread_rng();
-    for _ in 0..N_BODIES {
+    for n in 0..N_BODIES {
         let mass = rng.gen_range(0.5..=500.0);
         let lower_bound = WORLD_SIZE / 3.0;
         let upper_bound = 2.0 * lower_bound;
@@ -83,18 +75,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         );
         let density = rng.gen_range(1.0..=6.0);
         masses.push(mass);
-        positions.push(position);
+        positions_1.push(position);
         densities.push(density);
+        if position.x.round() as u32 % 20 == 0 {
+            emitters.push(n);
+        }
     }
+    emitters.shrink_to_fit();
 
-    /*setup:
-    	* buffers for I/O that the shader will r/w
-    	* if using BufferInitDescriptor, requires: initial state already allocated in CPU mem
-    	* bind ground: collection of resource (buffers, etc.)
-    	* pipeline: wrapper around shader
-    	*/
-    //buffers: ronly: mass, rw: position, vel
-
+    // Setup GPU buffers
     let mass_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("mass_buffer"),
         contents: bytemuck::cast_slice(&masses),
@@ -107,16 +96,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let emitters_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("emitters_buffer"),
-        contents: bytemuck::cast_slice(emitters),
+        contents: bytemuck::cast_slice(&emitters),
         usage: BufferUsages::STORAGE,
     });
     let mut pos_buffer_a = StorageBuffer::new(Vec::new());
-    pos_buffer_a.write(&positions).unwrap();
+    pos_buffer_a.write(&positions_1).unwrap();
     let pos_buffer_a = pos_buffer_a.into_inner();
     let mut pos_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("pos_buffer_a"),
         contents: &pos_buffer_a,
-        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, //inherently mapped at creation, as it creates and copies the data in one fn call
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
     });
     let mut pos_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("pos_buffer_b"),
@@ -126,8 +115,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let vel_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("vel_buffer_a"),
-        contents: bytemuck::cast_slice(&[0.0; N_BODIES * 3]), //init to 0, also *3 cast_slice flat
-        usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
+        contents: bytemuck::cast_slice(&[0.0; N_BODIES * 3]),
+        usage: BufferUsages::STORAGE,
     });
     let vel_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("vel_buffer_b"),
@@ -137,8 +126,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
     let acc_buffer_a = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("acc_buffer_a"),
-        contents: bytemuck::cast_slice(&[0.0; N_BODIES * 3]), //init to 0, also *3 cast_slice flat
-        usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
+        contents: bytemuck::cast_slice(&[0.0; N_BODIES * 3]),
+        usage: BufferUsages::STORAGE,
     });
     let acc_buffer_b = device.create_buffer(&BufferDescriptor {
         label: Some("acc_buffer_b"),
@@ -153,7 +142,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         mapped_at_creation: false,
     });
 
-    //bind group layouts
+    // Create bind group layouts
     let static_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("static_bind_group_layout"),
         entries: &[
@@ -163,9 +152,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
-                    min_binding_size: None, //TODO: optimize
+                    min_binding_size: None,
                 },
-                count: None, //other values only for Texture, not Storage
+                count: None,
             },
             BindGroupLayoutEntry {
                 binding: DENSITIES_BINDING,
@@ -173,9 +162,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
-                    min_binding_size: None, //TODO: optimize
+                    min_binding_size: None,
                 },
-                count: None, //other values only for Texture, not Storage
+                count: None,
             },
             BindGroupLayoutEntry {
                 binding: EMITTERS_BINDING,
@@ -195,54 +184,37 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             label: Some("kinematics_bind_group_layout"),
             entries: &[
                 BindGroupLayoutEntry {
-                    //position's entry
                     binding: POS_BINDING,
                     visibility: ShaderStages::COMPUTE | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
-                        min_binding_size: None, //TODO: optimize
+                        min_binding_size: None,
                     },
-                    count: None, //other values only for Texture, not Storage
+                    count: None,
                 },
                 BindGroupLayoutEntry {
-                    //velocity's entry
                     binding: VEL_BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
-                        min_binding_size: None, //TODO: optimize
+                        min_binding_size: None,
                     },
-                    count: None, //other values only for Texture, not Storage
+                    count: None,
                 },
                 BindGroupLayoutEntry {
-                    //acceleration's entry
                     binding: ACC_BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
                         has_dynamic_offset: false,
-                        min_binding_size: None, //TODO: optimize
+                        min_binding_size: None,
                     },
-                    count: None, //other values only for Texture, not Storage
+                    count: None,
                 },
             ],
         });
-
-    let camera_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("camera_bind_group_layout"),
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::FRAGMENT,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None, //TODO: optimize
-            },
-            count: None, //other values only for Texture, not Storage
-        }],
-    });
 
     let octree_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("octree_bind_group_layout"),
@@ -252,33 +224,37 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size: None, //TODO: optimize
+                min_binding_size: None,
             },
-            count: None, //other values only for Texture, not Storage
+            count: None,
         }],
     });
 
-    //bind groups: mass, pos_both, vel_both
+    let camera_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("camera_bind_group_layout"),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
+
+    // Create bind groups
     let static_bind_group = device.create_bind_group(&BindGroupDescriptor {
         label: Some("static_bind_group"),
         layout: &static_bind_group_layout,
         entries: &[
             BindGroupEntry {
                 binding: MASS_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &mass_buffer,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: mass_buffer.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: DENSITIES_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &mass_buffer,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: densities_buffer.as_entire_binding(),
             },
             BindGroupEntry {
@@ -294,20 +270,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &pos_buffer_a,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: pos_buffer_a.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: VEL_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &vel_buffer_a,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: vel_buffer_a.as_entire_binding(),
             },
             BindGroupEntry {
@@ -322,20 +288,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         entries: &[
             BindGroupEntry {
                 binding: POS_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &pos_buffer_b,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: pos_buffer_b.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: VEL_BINDING,
-                /*resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &vel_buffer_b,
-                    offset: 0,
-                    size: None,
-                }),*/
                 resource: vel_buffer_b.as_entire_binding(),
             },
             BindGroupEntry {
@@ -345,12 +301,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         ],
     });
 
-    //this shader must be compiled to a pipeline, and the handle thereof retrieved
+    // Compile nbody pipeline/shader
     let nbody_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("nbody_shader"),
-        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("nbody.wgsl"))),
+        source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("nbodybh.wgsl"))),
     });
-    //pipeline layout, then pipeline the compute shader
     let nbody_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("nbody_pipeline_layout"),
         bind_group_layouts: &[
@@ -359,16 +314,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             &kinematics_bind_group_layout,
             &octree_bind_group_layout,
         ],
-        push_constant_ranges: &[], //empty is fine
+        push_constant_ranges: &[],
     });
-    //pipeline itself
     let nbody_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
         label: Some("nbody_pipeline"),
         layout: Some(&nbody_pipeline_layout),
         module: &nbody_shader,
-        entry_point: "nbody_step", //name of fn within shader that gets called
+        entry_point: "nbody_step",
     });
 
+    // Compile render pipeline/shader
     let trace_shader = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("trace_shader"),
         source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("trace.wgsl"))),
@@ -405,9 +360,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut render_bool: bool = true;
     camera.position.z -= 10.0;
     event_loop.run(move |event, _, control_flow| {
-        //let _ = (&instance, &adapter, &nbody_shader);
-
         match event {
+            // Handle window resize
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
                 ..
@@ -418,6 +372,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 window.request_redraw();
             }
 
+            // Handle camera control inputs
             Event::WindowEvent {
                 event:
                     WindowEvent::KeyboardInput {
@@ -474,11 +429,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 }
             }
 
-            // Update simulation (nbody.wgsl)
+            // Update simulation (nbodybh.wgsl)
             Event::MainEventsCleared => {
-                //create a command encoder for each step call, which tells the pipeline to do Some ops on Some data
+                let mut nbody_step_cmd_encoder =
+                    device.create_command_encoder(&CommandEncoderDescriptor {
+                        label: Some("nbody_step_cmd_encoder"),
+                    });
 
-                let octree = OctreeNode::new_tree(&positions, &masses);
+                // Build octree, write to GPU
+                let octree = OctreeNode::new_tree(&positions_1, &masses);
                 let mut octree_buffer = StorageBuffer::new(Vec::new());
                 octree_buffer.write(&octree).unwrap();
                 let octree_buffer = octree_buffer.into_inner();
@@ -496,17 +455,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     }],
                 });
 
-                let mut nbody_step_cmd_encoder =
-                    device.create_command_encoder(&CommandEncoderDescriptor {
-                        label: Some("nbody_step_cmd_encoder"),
-                    });
+                // Queue nbody sim job
                 {
-                    //code block because we want lifetime of compute pass to end after
                     let mut nbody_step_pass =
                         nbody_step_cmd_encoder.begin_compute_pass(&ComputePassDescriptor {
                             label: Some("nbody_step_pass"),
                         });
-                    //now that we've initialized: set_pipeline, set_bind_group, dispatch_workgroups
                     nbody_step_pass.set_pipeline(&nbody_pipeline);
                     nbody_step_pass.set_bind_group(STATIC_GROUP, &static_bind_group, &[]);
                     nbody_step_pass.set_bind_group(
@@ -521,15 +475,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     );
                     nbody_step_pass.set_bind_group(OCTREE_GROUP, &octree_bind_group, &[]);
 
-                    //dispatch!
-                    //can use dispatch_workgroups_indirect to use GPU to compute clustering
-                    //then the GPU can determine n_workgroups from an in-GPU buffer without copy-paste
                     let n_workgroups: u32 = (((N_BODIES as f32) / (WG_SIZE as f32)).ceil()) as u32;
-                    //TODO: probably something else...
-                    //at minimum: spread across x,y,z to support more than like, 2^22 bodies
                     nbody_step_pass.dispatch_workgroups(n_workgroups, 1, 1);
                 }
 
+                // Queue readback of new positions to CPU from the GPU
                 nbody_step_cmd_encoder.copy_buffer_to_buffer(
                     &pos_buffer_b,
                     0,
@@ -538,9 +488,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     (mem::size_of::<[f32; 4]>() * N_BODIES) as u64,
                 );
 
-                //submit command encoder to queue
-                let _ = queue.submit(Some(nbody_step_cmd_encoder.finish()));
+                queue.submit(Some(nbody_step_cmd_encoder.finish()));
 
+                // Wait for position readback
                 let pos_slice = pos_readback_buffer.slice(..);
                 let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
                 pos_slice.map_async(MapMode::Read, move |v| sender.send(v).unwrap());
@@ -548,27 +498,24 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 pollster::block_on(receiver.receive());
                 let data = pos_slice.get_mapped_range();
                 let buf = StorageBuffer::new(&*data);
-                buf.read(&mut positions).unwrap();
+                buf.read(&mut positions_1).unwrap();
                 drop(data);
                 pos_readback_buffer.unmap();
 
-                //swap groups a and b to alternate I/O
+                // Swap buffers
                 mem::swap(&mut kinematics_bind_group_a, &mut kinematics_bind_group_b);
                 mem::swap(&mut pos_buffer_a, &mut pos_buffer_b);
-		if render_bool { 
-			render_bool = false; 
-			window.request_redraw(); 
-		} else{
-			render_bool = true;
-		}
 
+                // Alternate rendering every other frame
+                if render_bool {
+                    window.request_redraw();
+                }
+                render_bool = !render_bool;
             }
 
             // Render (trace.wgsl)
             Event::RedrawRequested(_) => {
-                // static mut running_average_time_render: Duration = Duration::new(0, 0);
-                // static mut number_frames_rendered: u32 = 0;
-                // let start_time: Instant = Instant::now();
+                // Setup frame
                 let frame = surface.get_current_texture().unwrap();
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
                 let mut trace_cmd_encoder =
@@ -576,6 +523,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         label: Some("trace_cmd_encoder"),
                     });
 
+                // Create camera uniform
                 let mut camera_buffer = UniformBuffer::new(Vec::new());
                 camera_buffer.write(&camera).unwrap();
                 let camera_buffer = camera_buffer.into_inner();
@@ -593,6 +541,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     }],
                 });
 
+                // Queue render job
                 {
                     let mut trace_pass =
                         trace_cmd_encoder.begin_render_pass(&RenderPassDescriptor {
@@ -613,21 +562,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                 queue.submit(Some(trace_cmd_encoder.finish()));
                 frame.present();
-                // let new_time: Instant = Instant::now();
-                // println!(
-                //     "Current Frame Time: {:?}",
-                //     new_time.duration_since(start_time)
-                // );
-                // unsafe {
-                //     running_average_time_render = (running_average_time_render
-                //         * number_frames_rendered
-                //         + new_time.duration_since(start_time))
-                //         / (number_frames_rendered + 1);
-                //     number_frames_rendered += 1;
-                //     println!("Average Frame Time: {:?}", running_average_time_render);
-                // }
             }
 
+            // Handle window exit
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..

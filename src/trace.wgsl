@@ -23,7 +23,8 @@ struct Camera {
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 @group(0) @binding(1) var<storage, read> densities: array<f32>;
 @group(0) @binding(2) var<storage, read> emitters: array<u32>;
-@group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>;
+// @group(1) @binding(0) var<storage, read> positions: array<vec3<f32>>; // For nbody_cpu
+@group(1) @binding(0) var<storage, read_write> positions: array<vec3<f32>>; // For nbody_gpu
 @group(2) @binding(0) var<uniform> camera: Camera;
 
 // formula for ray-sphere intersect from: https://facultyweb.cs.wwu.edu/~wehrwes/courses/csci480_21w/lectures/L07/L07_notes.pdf
