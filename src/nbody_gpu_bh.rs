@@ -67,7 +67,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     // Generate random bodies
     let mut rng = rand::thread_rng();
     for n in 0..N_BODIES {
-        let mass = rng.gen_range(0.5..=8.0)*rng.gen_range(0.5..=8.0);
+        let mass = rng.gen_range(0.5..=8.0) * rng.gen_range(0.5..=8.0);
         let lower_bound = WORLD_SIZE / 5.0;
         let upper_bound = 4.0 * lower_bound;
         let position = Vec3::new(
@@ -81,25 +81,34 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         positions_1.push(position);
         densities.push(density);
         if position.x.round() as u32 % 20 == 0 || n == 0 {
-            emitters.push(n);
+            emitters.push(n as u32);
         }
     }
     emitters.shrink_to_fit();
 
     // Setup GPU buffers
+    let mut mass_buffer = StorageBuffer::new(Vec::new());
+    mass_buffer.write(&masses).unwrap();
+    let mass_buffer = mass_buffer.into_inner();
     let mass_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("mass_buffer"),
-        contents: bytemuck::cast_slice(&masses),
+        contents: &mass_buffer,
         usage: BufferUsages::STORAGE, //inherently mapped at creation, as it creates and copies the data in one fn call
     });
+    let mut densities_buffer = StorageBuffer::new(Vec::new());
+    densities_buffer.write(&densities).unwrap();
+    let densities_buffer = densities_buffer.into_inner();
     let densities_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("densities_buffer"),
-        contents: bytemuck::cast_slice(&densities),
+        contents: &densities_buffer,
         usage: BufferUsages::STORAGE,
     });
+    let mut emitters_buffer = StorageBuffer::new(Vec::new());
+    emitters_buffer.write(&emitters).unwrap();
+    let emitters_buffer = emitters_buffer.into_inner();
     let emitters_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("emitters_buffer"),
-        contents: bytemuck::cast_slice(&emitters),
+        contents: &emitters_buffer,
         usage: BufferUsages::STORAGE,
     });
     let mut pos_buffer_a = StorageBuffer::new(Vec::new());
@@ -361,8 +370,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut camera = Camera::default();
     let mut render_bool: bool = true;
-    //camera.position.z -= 10.0;
-	camera.position = positions_1[0];
+    camera.position = positions_1[0];
     event_loop.run(move |event, _, control_flow| {
         match event {
             // Handle window resize

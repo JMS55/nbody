@@ -10,7 +10,7 @@
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
-    let G: f32 = .000000000066743; //can shift decimal as you see fit
+    let G: f32 = .0066743; //can shift decimal as you see fit
     let TIME_STEP: f32 = 0.1;
     let SOFTENING_SQRD: f32 = 1.0;
     let i_id = global_invocation_id.x; //only using x coord for now
