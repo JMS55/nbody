@@ -48,13 +48,12 @@ impl OctreeNode {
         }
 		
 		//cleanup: add all leaf-body nodes, each stored in vectors inside leaf_list_children, as contiguous blocks into nodes
-		for (i,leaf_children) in leaf_list_children.iter_mut().enumerate() { //TODO: Jasmine help!
+		for (i,leaf_children) in leaf_list_children.iter_mut().enumerate() {
 			let leaf_list = unsafe {&mut *leaf_lists[i]};
 			leaf_list.child_indices[0] = nodes.len() as u32;
 			leaf_list.child_indices[1] = leaf_children.len() as u32;
 			nodes.append(leaf_children);
-		}
-			
+		}	
 		
         //nodes[0].max_depth = max_depth;
         //dbg!(max_depth); //multiply by 8, that's the max traversal

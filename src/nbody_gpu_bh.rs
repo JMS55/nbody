@@ -1,6 +1,8 @@
 mod octree_maxdepth;
+//mod octree;
 
 use crate::octree_maxdepth::OctreeNode;
+//use crate::octree::OctreeNode;
 use encase::{ShaderType, StorageBuffer, UniformBuffer};
 use glam::{Vec2, Vec3};
 use rand::Rng;
@@ -73,7 +75,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             rng.gen_range(lower_bound..=upper_bound),
             rng.gen_range(lower_bound..=upper_bound),
         );
-        let density = rng.gen_range(1.0..=6.0);
+        let density = rng.gen_range(5.0..=6.0);
         masses.push(mass);
         positions_1.push(position);
         densities.push(density);

@@ -13,6 +13,8 @@ let NODETYPE_LEAFBODY: u32 = 1u;
 let NODETYPE_LEAFLIST: u32 = 2u;
 let NODETYPE_INTERIOR: u32 = 3u;
 
+let WORLD_SIZE:f32 = 100.0;
+
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 //TODO: figure out if these access methods can be specified better
 @group(1) @binding(0) var<storage, read_write> positions_in: array<vec3<f32>>;
@@ -26,7 +28,7 @@ let NODETYPE_INTERIOR: u32 = 3u;
 @compute
 @workgroup_size(64)
 fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
-    let G: f32 = 0.00066743; //can shift decimal as you see fit
+    let G: f32 = 0.0066743; //can shift decimal as you see fit
     let TIME_STEP: f32 = 0.1;
     let SOFTENING_SQRD: f32 = 1.0;
     let i_id = global_invocation_id.x; //only using x coord for now
@@ -58,9 +60,9 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
     let time_step = TIME_STEP;
 	let theta = 0.5;
 
-	var stack:array<u32, 800>;
+	var stack:array<u32, 800>; //NEEDS to be variably sized
+	//size needed for stack: MAX(n, MAX_DEPTH*BRANCHING_FACTOR); this MAX can be computed on the CPU, just *need* to pass it in here
 	var top:i32 = 0;
-
 	stack[top] = 0u;
     top = top + 1;
 
@@ -69,8 +71,8 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 			break;
 		}
 
-		var node:OctreeNode = octree[stack[top]];
 		top = top - 1;
+		var node:OctreeNode = octree[stack[top]];
 		if (node.node_type == NODETYPE_LEAFBODY) {
 			let other_mass: f32 = node.total_mass;
 			let other_pos: vec3<f32> = node.center_of_mass;
@@ -92,10 +94,10 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 					//acos(a dot b)/(magA * magB)
 					//mag(a) = 2-norm(a) = distance(0vec, a)
 				//start with the angle between the accelerator and the current velocity
-			//var bias = acos( dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0) );
+			var bias = acos( dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0) );
 				//pow to rein in the extremes
-			//bias = pow(bias, .15);
-			//g *= bias;
+			bias = pow(bias, .15);
+			g *= bias;
 
 			acc += g * dist_vec;			
 		} else {
@@ -132,14 +134,14 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 				acc += g * dist_vec;				
 			} else { //case: not approximable
 				var i:u32 = 0u;
-				if (node.node_type == NODETYPE_LEAFLIST) { //case: leaf-list, all-pairs with its list
-					var j:u32 = node.child_indices[0];
-					loop{
-						stack[top] = j+i;
-						top = top + 1;
-						i += 1u;
-						if (i >= node.child_indices[1]) {
-							break;
+					if (node.node_type == NODETYPE_LEAFLIST) { //case: leaf-list, all-pairs with its list
+						var j:u32 = node.child_indices[0];
+						loop{
+							stack[top] = j+i;
+							top = top + 1;
+							i += 1u;
+							if (i >= node.child_indices[1]) {
+								break;
 						}
 					}
 				} else { //case: interior node, recur onto children
@@ -162,7 +164,7 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
     vel += 0.5 * (accelerations_in[i_id] + acc) * time_step;
 
 	//update in the outputs
-    positions_out[i_id] = pos;
+    positions_out[i_id] = clamp(pos, vec3<f32>(0.0), vec3<f32>(WORLD_SIZE));
     velocities_out[i_id] = vel;
     accelerations_out[i_id] = acc;
 }
