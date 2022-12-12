@@ -16,8 +16,8 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 100;
-pub const WORLD_SIZE: f32 = 100.0;
+const N_BODIES: usize = 250;
+pub const WORLD_SIZE: f32 = 250.0;
 
 const WG_SIZE: usize = 64;
 const STATIC_GROUP: u32 = 0;
@@ -67,15 +67,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     // Generate random bodies
     let mut rng = rand::thread_rng();
     for n in 0..N_BODIES {
-        let mass = rng.gen_range(0.5..=500.0);
-        let lower_bound = WORLD_SIZE / 3.0;
-        let upper_bound = 2.0 * lower_bound;
+        let mass = rng.gen_range(0.5..=8.0)*rng.gen_range(0.5..=8.0);
+        let lower_bound = WORLD_SIZE / 5.0;
+        let upper_bound = 4.0 * lower_bound;
         let position = Vec3::new(
             rng.gen_range(lower_bound..=upper_bound),
             rng.gen_range(lower_bound..=upper_bound),
             rng.gen_range(lower_bound..=upper_bound),
         );
-        let density = rng.gen_range(5.0..=6.0);
+        //let density = rng.gen_range(0.1..=1.0);
+        let density = 1.0;
         masses.push(mass);
         positions_1.push(position);
         densities.push(density);
@@ -360,7 +361,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut camera = Camera::default();
     let mut render_bool: bool = true;
-    camera.position.z -= 10.0;
+    //camera.position.z -= 10.0;
+	camera.position = positions_1[0];
     event_loop.run(move |event, _, control_flow| {
         match event {
             // Handle window resize
