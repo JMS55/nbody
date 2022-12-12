@@ -3,6 +3,18 @@ name = "nbody"
 version = "1.0.0"
 edition = "2021"
 
+[[bin]]
+name = "nbody_cpu"
+path = "src/nbody_cpu.rs"
+
+[[bin]]
+name = "nbody_gpu"
+path = "src/nbody_gpu.rs"
+
+[[bin]]
+name = "nbody_gpu_bh"
+path = "src/nbody_gpu_bh.rs"
+
 [dependencies]
 wgpu = "0.14"
 winit = "0.27"
@@ -12,3 +24,4 @@ pollster = "0.2"
 glam = "0.22"
 futures-intrusive = "0.5"
 rand = "0.8"
+rayon = "1.6"
