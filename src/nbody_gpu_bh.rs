@@ -1,6 +1,6 @@
-mod octree;
+mod octree_maxdepth;
 
-use crate::octree::OctreeNode;
+use crate::octree_maxdepth::OctreeNode;
 use encase::{ShaderType, StorageBuffer, UniformBuffer};
 use glam::{Vec2, Vec3};
 use rand::Rng;
@@ -14,8 +14,8 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 100_000;
-pub const WORLD_SIZE: f32 = 1000.0;
+const N_BODIES: usize = 100;
+pub const WORLD_SIZE: f32 = 100.0;
 
 const WG_SIZE: usize = 64;
 const STATIC_GROUP: u32 = 0;
@@ -77,7 +77,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         masses.push(mass);
         positions_1.push(position);
         densities.push(density);
-        if position.x.round() as u32 % 20 == 0 {
+        if position.x.round() as u32 % 20 == 0 || n == 0 {
             emitters.push(n);
         }
     }
@@ -438,6 +438,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                 // Build octree, write to GPU
                 let octree = OctreeNode::new_tree(&positions_1, &masses);
+                //let octree = OctreeNode::new_tree(&[], &[]);
                 let mut octree_buffer = StorageBuffer::new(Vec::new());
                 octree_buffer.write(&octree).unwrap();
                 let octree_buffer = octree_buffer.into_inner();

@@ -5,9 +5,13 @@ struct OctreeNode {
     range: f32,
 	total_mass: f32,
 	child_indices: array<u32, 8>,
-	is_leaf: u32,
-    max_depth: u32,
+	node_type: u32,
 };
+let MAX_DEPTH: u32 = 16u;
+let NODETYPE_DUMMY: u32 = 0u;
+let NODETYPE_LEAFBODY: u32 = 1u;
+let NODETYPE_LEAFLIST: u32 = 2u;
+let NODETYPE_INTERIOR: u32 = 3u;
 
 @group(0) @binding(0) var<storage, read> masses: array<f32>;
 //TODO: figure out if these access methods can be specified better
@@ -67,7 +71,7 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 
 		var node:OctreeNode = octree[stack[top]];
 		top = top - 1;
-		if (node.is_leaf == 1u) {
+		if (node.node_type == NODETYPE_LEAFBODY) {
 			let other_mass: f32 = node.total_mass;
 			let other_pos: vec3<f32> = node.center_of_mass;
 			let dist_vec = other_pos - pos;
@@ -88,12 +92,10 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 					//acos(a dot b)/(magA * magB)
 					//mag(a) = 2-norm(a) = distance(0vec, a)
 				//start with the angle between the accelerator and the current velocity
-			var bias = acos(
-				dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0)
-			);
+			//var bias = acos( dot(vel, dist_vec) / (distance(vec3(0.0), dist_vec) * distance(vec3(0.0), vel) + 1.0) );
 				//pow to rein in the extremes
-			bias = pow(bias, .15);
-			g *= bias;
+			//bias = pow(bias, .15);
+			//g *= bias;
 
 			acc += g * dist_vec;			
 		} else {
@@ -128,16 +130,28 @@ fn nbody_step(@builtin(global_invocation_id) global_invocation_id: vec3<u32>, @b
 				g *= bias;
 
 				acc += g * dist_vec;				
-			} else {
+			} else { //case: not approximable
 				var i:u32 = 0u;
-				loop{
-					if (node.child_indices[i] != 0u) {
-						stack[top] = node.child_indices[i];
+				if (node.node_type == NODETYPE_LEAFLIST) { //case: leaf-list, all-pairs with its list
+					var j:u32 = node.child_indices[0];
+					loop{
+						stack[top] = j+i;
 						top = top + 1;
+						i += 1u;
+						if (i >= node.child_indices[1]) {
+							break;
+						}
 					}
-					i += 1u;
-					if (i >= 8u) {
-						break;
+				} else { //case: interior node, recur onto children
+					loop{
+						if (node.child_indices[i] != 0u) {
+							stack[top] = node.child_indices[i];
+							top = top + 1;
+						}
+						i += 1u;
+						if (i >= 8u) {
+							break;
+						}
 					}
 				}
 			}

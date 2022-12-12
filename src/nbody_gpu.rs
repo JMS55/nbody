@@ -11,8 +11,8 @@ use winit::{
     window::Window,
 };
 
-const N_BODIES: usize = 100_000;
-pub const WORLD_SIZE: f32 = 1000.0;
+const N_BODIES: usize = 1000;
+pub const WORLD_SIZE: f32 = 100.0;
 
 const WG_SIZE: usize = 64;
 const STATIC_GROUP: u32 = 0;
